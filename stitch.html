@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "outline": "#8b909f",
+                        "on-tertiary-fixed": "#410003",
+                        "on-error-container": "#ffdad6",
+                        "background": "#10141a",
+                        "secondary-container": "#007f2d",
+                        "primary": "#acc7ff",
+                        "on-primary-fixed-variant": "#004492",
+                        "inverse-on-surface": "#2d3137",
+                        "surface-tint": "#acc7ff",
+                        "on-secondary-fixed": "#002106",
+                        "inverse-surface": "#dfe2eb",
+                        "tertiary-fixed-dim": "#ffb3ad",
+                        "surface-container-low": "#181c22",
+                        "surface-container-highest": "#31353c",
+                        "on-primary-fixed": "#001a40",
+                        "on-primary": "#002f68",
+                        "on-error": "#690005",
+                        "tertiary": "#ffb3ad",
+                        "surface-container-lowest": "#0a0e14",
+                        "surface": "#10141a",
+                        "surface-container-high": "#262a31",
+                        "error-container": "#93000a",
+                        "on-tertiary": "#66070c",
+                        "on-surface": "#dfe2eb",
+                        "outline-variant": "#414754",
+                        "surface-dim": "#10141a",
+                        "on-surface-variant": "#c1c6d6",
+                        "secondary-fixed-dim": "#74dd7e",
+                        "on-background": "#dfe2eb",
+                        "primary-fixed-dim": "#acc7ff",
+                        "inverse-primary": "#005bbf",
+                        "tertiary-fixed": "#ffdad6",
+                        "secondary": "#74dd7e",
+                        "on-primary-container": "#00285b",
+                        "on-secondary": "#003910",
+                        "surface-bright": "#353940",
+                        "surface-variant": "#31353c",
+                        "primary-container": "#498fff",
+                        "on-tertiary-container": "#5c0006",
+                        "error": "#ffb4ab",
+                        "primary-fixed": "#d7e2ff",
+                        "surface-container": "#1c2026",
+                        "on-secondary-fixed-variant": "#00531b",
+                        "tertiary-container": "#e86961",
+                        "secondary-fixed": "#90fa97",
+                        "on-secondary-container": "#c4ffc2",
+                        "on-tertiary-fixed-variant": "#86211f"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.125rem",
+                        "lg": "0.25rem",
+                        "xl": "0.5rem",
+                        "full": "0.75rem"
+                    },
+                    "fontFamily": {
+                        "headline": ["Inter"],
+                        "body": ["Inter"],
+                        "label": ["Inter"],
+                        "mono": ["JetBrains Mono"]
+                    }
+                },
+            }
+        }
+    </script>
+<style>
+        body { font-family: 'Inter', sans-serif; background-color: #10141a; color: #dfe2eb; }
+        .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24; }
+        .code-diff-scroll::-webkit-scrollbar { width: 4px; }
+        .code-diff-scroll::-webkit-scrollbar-track { background: #0a0e14; }
+        .code-diff-scroll::-webkit-scrollbar-thumb { background: #414754; border-radius: 10px; }
+        .glass-panel { backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background text-on-surface overflow-hidden h-screen flex flex-col">
+<!-- TopAppBar -->
+<header class="fixed top-0 w-full z-50 bg-[#10141a]/70 backdrop-blur-xl border-b border-[#414754]/20 shadow-[0_4px_12px_rgba(0,0,0,0.4)] flex items-center justify-between px-4 h-14 w-full">
+<div class="flex items-center gap-3">
+<button class="text-[#acc7ff] hover:bg-[#acc7ff]/10 transition-colors p-2 rounded-lg active:scale-95 duration-200">
+<span class="material-symbols-outlined">menu</span>
+</button>
+<div class="flex flex-col">
+<h1 class="text-lg font-bold tracking-tighter text-[#dfe2eb]">AI Code Review Bench</h1>
+<div class="flex items-center gap-1.5 text-[10px] text-on-surface-variant font-mono">
+<span>benchmark</span>
+<span class="material-symbols-outlined text-[10px]">chevron_right</span>
+<span>tasks</span>
+<span class="material-symbols-outlined text-[10px]">chevron_right</span>
+<span class="text-primary">task_001.py</span>
+</div>
+</div>
+</div>
+<div class="w-8 h-8 rounded-full overflow-hidden border border-outline-variant/30">
+<img alt="User profile" class="w-full h-full object-cover" data-alt="Close-up professional headshot of a software engineer in soft cinematic lighting with high contrast" src="https://lh3.googleusercontent.com/aida-public/AB6AXuA-V4pEeq1CdQL_K5yQTA-EuOKqb6yodfdSruogIIGBDp0SoFMQvZ6zhyV15ITwN0mdu5EQJ1rDNNXqO-owipGzRXeAbOzhC0nEG8k994zIPyyOEad4S7n6wNCH9eOu08ecI0mSjC8CwYneeZp0YcXQZUi9eTn1GKtWjiVXXtVZs10CSp5wKjxowBTB1y9-PhO0WRmXtQ5uZEGhpuEteptLgQnkk_SDgzpRw7b16Jygpmk8qi-L7PuzBtkEhnUdfLP-AsYyuHth9hg"/>
+</div>
+</header>
+<!-- Main Layout Container -->
+<main class="flex-1 mt-14 mb-16 overflow-hidden flex relative">
+<!-- NavigationDrawer (Sidebar - Desktop hidden logic applied contextually) -->
+<aside class="hidden md:flex h-full w-64 border-r border-[#414754]/20 bg-[#10141a]/80 backdrop-blur-2xl shadow-2xl fixed inset-y-0 left-0 z-40 flex-col pt-16">
+<div class="px-6 py-4">
+<h2 class="font-['JetBrains_Mono'] text-xs uppercase tracking-widest text-[#acc7ff] mb-4">Difficulty Filters</h2>
+<nav class="space-y-1">
+<button class="w-full flex items-center gap-3 px-4 py-3 border-l-2 border-[#acc7ff] bg-[#acc7ff]/5 text-[#acc7ff] font-bold transition-all duration-300 ease-in-out">
+<span class="material-symbols-outlined">signal_cellular_1_bar</span>
+<span class="font-mono text-xs">Easy</span>
+</button>
+<button class="w-full flex items-center gap-3 px-4 py-3 text-[#dfe2eb]/60 hover:bg-[#dfe2eb]/5 transition-all duration-300 ease-in-out">
+<span class="material-symbols-outlined">signal_cellular_3_bar</span>
+<span class="font-mono text-xs">Medium</span>
+</button>
+<button class="w-full flex items-center gap-3 px-4 py-3 text-[#dfe2eb]/60 hover:bg-[#dfe2eb]/5 transition-all duration-300 ease-in-out">
+<span class="material-symbols-outlined">signal_cellular_4_bar</span>
+<span class="font-mono text-xs">Hard</span>
+</button>
+</nav>
+</div>
+</aside>
+<!-- Central Content: Code Diff Viewer -->
+<section class="flex-1 flex flex-col md:ml-64 overflow-hidden bg-surface-container-lowest">
+<!-- Tabs/Controls -->
+<div class="flex items-center h-10 px-4 bg-surface-container-low border-b border-outline-variant/10">
+<div class="flex items-center gap-2 px-3 py-1 bg-surface-container-highest rounded-t-lg border-x border-t border-outline-variant/20">
+<span class="material-symbols-outlined text-sm text-[#74dd7e]">javascript</span>
+<span class="text-xs font-mono text-on-surface">task_001.py</span>
+</div>
+<div class="ml-auto flex gap-4">
+<span class="text-[10px] font-mono text-outline-variant">Line 42, Col 8</span>
+<span class="text-[10px] font-mono text-outline-variant">UTF-8</span>
+</div>
+</div>
+<!-- Code Well -->
+<div class="flex-1 overflow-auto code-diff-scroll font-mono text-xs leading-relaxed p-4 bg-surface-container-lowest">
+<!-- Row 1 -->
+<div class="flex">
+<div class="w-8 text-right pr-4 text-outline-variant select-none">1</div>
+<div class="flex-1 text-on-surface">def process_user_data(data):</div>
+</div>
+<!-- Row 2 -->
+<div class="flex">
+<div class="w-8 text-right pr-4 text-outline-variant select-none">2</div>
+<div class="flex-1 text-on-surface">    """Process raw input strings."""</div>
+</div>
+<!-- Row 3: Removed -->
+<div class="flex bg-error-container/20 border-l-4 border-error">
+<div class="w-8 text-right pr-4 text-error/60 select-none">3</div>
+<div class="flex-1 text-on-surface">
+<span class="bg-error/30">-    if data == None:</span>
+</div>
+</div>
+<!-- Row 3: Added -->
+<div class="flex bg-secondary-container/20 border-l-4 border-secondary">
+<div class="w-8 text-right pr-4 text-secondary/60 select-none">3</div>
+<div class="flex-1 text-on-surface">
+<span class="bg-secondary/30">+    if data is None:</span>
+</div>
+</div>
+<!-- Row 4 -->
+<div class="flex">
+<div class="w-8 text-right pr-4 text-outline-variant select-none">4</div>
+<div class="flex-1 text-on-surface">        return []</div>
+</div>
+<!-- Row 5: Removed -->
+<div class="flex bg-error-container/20 border-l-4 border-error">
+<div class="w-8 text-right pr-4 text-error/60 select-none">5</div>
+<div class="flex-1 text-on-surface">
+<span class="bg-error/30">-    res = [x.strip() for x in data]</span>
+</div>
+</div>
+<!-- Row 5: Added -->
+<div class="flex bg-secondary-container/20 border-l-4 border-secondary">
+<div class="w-8 text-right pr-4 text-secondary/60 select-none">5</div>
+<div class="flex-1 text-on-surface">
+<span class="bg-secondary/30">+    res = [item.strip() for item in data if item]</span>
+</div>
+</div>
+<!-- Row 6 -->
+<div class="flex">
+<div class="w-8 text-right pr-4 text-outline-variant select-none">6</div>
+<div class="flex-1 text-on-surface">    return res</div>
+</div>
+<!-- Spacer -->
+<div class="h-20"></div>
+</div>
+</section>
+<!-- Right Side Panel: Review Actions & Logs (Mobile Bottom Sheet / Desktop Drawer) -->
+<aside class="hidden lg:flex w-80 flex-col bg-surface-container border-l border-outline-variant/10 shadow-2xl">
+<!-- Review Actions -->
+<div class="p-4 border-b border-outline-variant/10">
+<h3 class="text-[11px] font-bold uppercase tracking-wider text-outline mb-4 flex items-center gap-2">
+<span class="material-symbols-outlined text-sm">rule</span>
+                    Review Actions
+                </h3>
+<div class="grid grid-cols-2 gap-2 mb-4">
+<button class="flex items-center justify-center gap-2 px-3 py-2 bg-surface-container-high border border-outline-variant/20 rounded-md text-xs font-medium hover:bg-surface-bright transition-colors">
+<span class="material-symbols-outlined text-sm">visibility</span>
+                        View File
+                    </button>
+<button class="flex items-center justify-center gap-2 px-3 py-2 bg-surface-container-high border border-outline-variant/20 rounded-md text-xs font-medium hover:bg-surface-bright transition-colors">
+<span class="material-symbols-outlined text-sm">chat_bubble</span>
+                        Comment
+                    </button>
+</div>
+<div class="flex flex-col gap-2">
+<button class="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-secondary text-on-secondary rounded-md text-xs font-bold shadow-lg active:scale-[0.98] transition-transform">
+<span class="material-symbols-outlined text-base">check_circle</span>
+                        Approve
+                    </button>
+<button class="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-tertiary-container/20 text-tertiary-container border border-tertiary-container/30 rounded-md text-xs font-bold hover:bg-tertiary-container/30 transition-colors">
+<span class="material-symbols-outlined text-base">report</span>
+                        Request Changes
+                    </button>
+</div>
+</div>
+<!-- Episode Log -->
+<div class="flex-1 overflow-hidden flex flex-col">
+<div class="p-4 bg-surface-container-low flex items-center justify-between">
+<h3 class="text-[11px] font-bold uppercase tracking-wider text-outline">Episode Log</h3>
+<span class="text-[9px] font-mono px-1.5 py-0.5 bg-primary/10 text-primary border border-primary/20 rounded">LIVE</span>
+</div>
+<div class="flex-1 overflow-y-auto p-4 font-mono text-[10px] space-y-3 code-diff-scroll">
+<div class="flex gap-2">
+<span class="text-outline-variant shrink-0">[14:20:05]</span>
+<span class="text-secondary">Model initialized...</span>
+</div>
+<div class="flex gap-2">
+<span class="text-outline-variant shrink-0">[14:20:10]</span>
+<span class="text-on-surface">Code chunk processed.</span>
+</div>
+<div class="flex gap-2">
+<span class="text-outline-variant shrink-0">[14:20:12]</span>
+<span class="text-primary">Running linter checks...</span>
+</div>
+<div class="flex gap-2">
+<span class="text-outline-variant shrink-0">[14:20:15]</span>
+<span class="text-tertiary">Warning: Identity equality found.</span>
+</div>
+<div class="flex gap-2">
+<span class="text-outline-variant shrink-0">[14:20:18]</span>
+<span class="text-on-surface">Applying AI refactoring rules.</span>
+</div>
+<div class="flex gap-2">
+<span class="text-outline-variant shrink-0">[14:20:20]</span>
+<span class="text-secondary">Diff generation complete.</span>
+</div>
+</div>
+</div>
+</aside>
+<!-- Mobile Floating Action (Contextual) -->
+<button class="lg:hidden fixed bottom-20 right-6 w-14 h-14 bg-primary text-on-primary rounded-full shadow-2xl flex items-center justify-center active:scale-90 transition-transform z-[60]">
+<span class="material-symbols-outlined text-2xl" style="font-variation-settings: 'FILL' 1;">add</span>
+</button>
+</main>
+<!-- BottomNavBar -->
+<nav class="fixed bottom-0 left-0 w-full z-50 flex justify-around items-center h-16 pb-safe bg-[#10141a]/90 backdrop-blur-lg rounded-t-lg border-t border-[#414754]/30 shadow-[0_-4px_12px_rgba(0,0,0,0.5)]">
+<button class="flex flex-col items-center justify-center text-[#dfe2eb]/40 hover:text-[#acc7ff] tap-highlight-transparent active:scale-90 transition-transform">
+<span class="material-symbols-outlined text-xl">folder_open</span>
+<span class="font-['Inter'] text-[10px] font-semibold">Explorer</span>
+</button>
+<button class="flex flex-col items-center justify-center text-[#acc7ff] scale-110 tap-highlight-transparent active:scale-90 transition-transform">
+<span class="material-symbols-outlined text-xl" style="font-variation-settings: 'FILL' 1;">difference</span>
+<span class="font-['Inter'] text-[10px] font-semibold">Review</span>
+</button>
+<button class="flex flex-col items-center justify-center text-[#dfe2eb]/40 hover:text-[#acc7ff] tap-highlight-transparent active:scale-90 transition-transform">
+<span class="material-symbols-outlined text-xl">rule</span>
+<span class="font-['Inter'] text-[10px] font-semibold">Actions</span>
+</button>
+<button class="flex flex-col items-center justify-center text-[#dfe2eb]/40 hover:text-[#acc7ff] tap-highlight-transparent active:scale-90 transition-transform">
+<span class="material-symbols-outlined text-xl">terminal</span>
+<span class="font-['Inter'] text-[10px] font-semibold">Logs</span>
+</button>
+</nav>
+</body></html>
