@@ -1,10 +1,65 @@
-# 🔍 Code Review Assistant Environment
+# 🔍 Code Review Assistant — Full-Stack Application
 
 > **HumanEval for code review** — train and benchmark AI agents on the task senior engineers spend 40% of their time doing.
 
 [![PyPI](https://img.shields.io/pypi/v/code-review-env)](https://pypi.org/project/code-review-env)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![OpenEnv Compatible](https://img.shields.io/badge/OpenEnv-compliant-blue)](openenv.yaml)
+
+## 📁 Project Structure
+
+```
+meta/
+├── backend/           ← FastAPI Python backend (all core logic)
+│   ├── app.py                 # FastAPI server (JSON-only API)
+│   ├── baseline.py            # Baseline agents (stub + GPT-4)
+│   ├── inference.py           # Batch evaluation pipeline
+│   ├── requirements.txt
+│   ├── env/                   # Environment core
+│   ├── tasks/                 # Task definitions (easy/medium/hard)
+│   ├── grader/                # Grading system
+│   └── generator/             # PR data generators
+│
+├── frontend/          ← React (Vite) frontend
+│   ├── src/
+│   │   ├── App.jsx
+│   │   ├── components/        # TaskSelector, PRViewer, ActionPanel, etc.
+│   │   └── services/api.js    # Axios API layer
+│   ├── package.json
+│   └── vite.config.js
+│
+└── README.md
+```
+
+## 🚀 Getting Started
+
+### Backend
+
+```bash
+cd backend
+pip install -r requirements.txt
+uvicorn app:app --reload --port 8000
+```
+
+### Frontend
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+Open `http://localhost:5173` in your browser.
+
+### API Routes
+
+| Method | Endpoint            | Description                  |
+|--------|---------------------|------------------------------|
+| GET    | `/api/tasks`        | List available tasks         |
+| POST   | `/api/reset/{task}` | Reset env with a task        |
+| POST   | `/api/step`         | Execute an action            |
+| GET    | `/api/state`        | Get current environment state|
+| POST   | `/api/auto_action`  | AI-suggested next action     |
 
 ---
 
