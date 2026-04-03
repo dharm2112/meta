@@ -15,6 +15,8 @@ meta/
 │   ├── baseline.py            # Baseline agents (stub + GPT-4)
 │   ├── inference.py           # Batch evaluation pipeline
 │   ├── requirements.txt
+│   ├── scripts/               # Utility scripts
+│   │   └── test_pipeline.py   # End-to-end pipeline test
 │   ├── env/                   # Environment core
 │   ├── tasks/                 # Task definitions (easy/medium/hard)
 │   ├── grader/                # Grading system
@@ -37,7 +39,16 @@ meta/
 
 ```bash
 cd backend
+
+# Create and activate virtual environment
+python -m venv venv
+venv\Scripts\activate  # On Windows
+# source venv/bin/activate  # On Linux/Mac
+
+# Install dependencies
 pip install -r requirements.txt
+
+# Start the server
 uvicorn app:app --reload --port 8000
 ```
 
