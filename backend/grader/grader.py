@@ -2,87 +2,44 @@
 
 from __future__ import annotations
 from typing import Any, Dict, List
-from grader.score_utils import clamp_score, compute_detection_accuracy, compute_decision_accuracy
+
+from env.reward import RewardEngine
 
 
 class TaskGrader:
-    """Grades a completed episode against expected issues."""
+    """Grades a completed episode against hidden task metadata."""
 
-    DETECTION_WEIGHT = 0.60
-    DECISION_WEIGHT = 0.40
-
-    def __init__(self, task_name: str = "", expected_issues: List[str] = None):
-        self.task_name = task_name
-        self.expected_issues = expected_issues or []
+    def __init__(self, task: Dict[str, Any]):
+        self.task = task
         self._last_report: Dict[str, Any] = {}
 
-    def grade_episode(
-        self,
-        actions_taken: List[Dict[str, Any]],
-        expected_issues: List[str] = None,
-    ) -> float:
-        """Grade a full episode. Returns normalized score in [0.0, 1.0]."""
-        expected = expected_issues or self.expected_issues
-        detected = self._extract_detected_issues(actions_taken, expected)
-        final_action = self._extract_final_action(actions_taken)
+    def grade_episode(self, actions_taken: List[Dict[str, Any]]) -> float:
+        score, breakdown = RewardEngine.score_actions(self.task, actions_taken)
+        status = "PASS" if score >= float(self.task["pass_threshold"]) else "FAIL"
 
-        detection_acc = compute_detection_accuracy(expected, detected)
-        decision_acc = compute_decision_accuracy(final_action, expected, detected)
-
-        raw = (detection_acc * self.DETECTION_WEIGHT) + (decision_acc * self.DECISION_WEIGHT)
-        score = self.normalize_score(raw)
-
-        status = "PASS" if score >= 0.50 else "FAIL"
         self._last_report = {
-            "task_name": self.task_name,
-            "issues_expected": expected,
-            "issues_detected": detected,
-            "detection_accuracy": round(detection_acc, 4),
-            "decision_correct": decision_acc == 1.0,
-            "final_score": score,
+            "task_id": self.task["id"],
+            "difficulty": self.task["difficulty"],
+            "issue_title": self.task["issue_title"],
+            "bug_type": self.task["ground_truth"]["bug_type"],
+            "relevant_files": self.task["ground_truth"]["relevant_files"],
+            "submitted_decision": breakdown["final_decision"],
+            "correct_decision": breakdown["correct_decision"],
+            "decision_correct": breakdown["final_decision"] == breakdown["correct_decision"],
+            "evidence_score": breakdown["evidence_score"],
+            "issue_identification_score": breakdown["issue_identification_score"],
+            "decision_score": breakdown["decision_score"],
+            "penalties": breakdown["penalties"],
+            "keyword_hits": breakdown["keyword_hits"],
+            "root_cause_hit": breakdown["root_cause_hit"],
+            "inspected_diffs": breakdown["inspected_diffs"],
+            "inspected_files": breakdown["inspected_files"],
+            "pass_threshold": self.task["pass_threshold"],
+            "final_score": round(score, 4),
             "grade_status": status,
         }
         return score
 
-    def normalize_score(self, raw_score: float) -> float:
-        """Clamp raw score to [0.0, 1.0]."""
-        return clamp_score(raw_score)
-
     def generate_grade_report(self) -> Dict[str, Any]:
         """Return the report from the last grade_episode call."""
         return dict(self._last_report)
-
-    @staticmethod
-    def _extract_detected_issues(
-        actions: List[Dict[str, Any]],
-        expected: List[str],
-    ) -> List[str]:
-        """Parse comment actions to find which expected issues were mentioned."""
-        detected: List[str] = []
-        for a in actions:
-            if a.get("action_type") != "comment_issue":
-                continue
-            comment = (a.get("comment") or "").lower()
-            for issue in expected:
-                if issue in comment and issue not in detected:
-                    detected.append(issue)
-        return detected
-
-    @staticmethod
-    def _extract_final_action(actions: List[Dict[str, Any]]) -> str:
-        """Return the last action_type in the episode."""
-        if not actions:
-            return ""
-        return actions[-1].get("action_type", "")
-
-
-if __name__ == "__main__":
-    grader = TaskGrader(task_name="demo", expected_issues=["sql_injection", "logic_bug"])
-    actions = [
-        {"action_type": "view_file", "comment": None},
-        {"action_type": "comment_issue", "comment": "Found sql_injection in query"},
-        {"action_type": "request_changes", "comment": None},
-    ]
-    score = grader.grade_episode(actions)
-    print(f"Score: {score}")
-    print(f"Report: {grader.generate_grade_report()}")

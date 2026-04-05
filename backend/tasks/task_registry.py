@@ -1,30 +1,13 @@
-"""Central task registry for OpenEnv validator and Gradio dropdown integration."""
+"""Central task registry backed by offline JSON task files."""
 
 from __future__ import annotations
-from typing import Any, Dict, List, Union
 
-from tasks.task_easy import TaskEasy
-from tasks.task_medium import TaskMedium
-from tasks.task_hard import TaskHard
+from typing import Any, Dict, List
 
-TaskInstance = Union[TaskEasy, TaskMedium, TaskHard]
+from tasks.loader import get_available_tasks, get_task_catalog, load_task
 
-TASK_REGISTRY: Dict[str, TaskInstance] = {
-    "easy": TaskEasy(),
-    "medium": TaskMedium(),
-    "hard": TaskHard(),
+TASK_REGISTRY: Dict[str, Dict[str, Any]] = {
+    task_id: load_task(task_id) for task_id in get_available_tasks()
 }
 
-
-def get_available_tasks() -> List[str]:
-    """Return list of registered task names (for dropdowns / inference loops)."""
-    return list(TASK_REGISTRY.keys())
-
-
-def load_task(task_name: str) -> TaskInstance:
-    """Load a task instance by name. Raises KeyError if not found."""
-    if task_name not in TASK_REGISTRY:
-        raise KeyError(
-            f"Unknown task '{task_name}'. Available: {get_available_tasks()}"
-        )
-    return TASK_REGISTRY[task_name]
+__all__ = ["TASK_REGISTRY", "get_available_tasks", "get_task_catalog", "load_task"]

@@ -37,25 +37,36 @@ export default function ResultPanel({ score, report }) {
         {report && (
           <div className="result-details">
             <div className="result-detail-row">
-              <span className="detail-label">Detection</span>
+              <span className="detail-label">Evidence</span>
               <div className="detail-bar-wrap">
-                <div className="detail-bar" style={{width: `${report.detection_accuracy * 100}%`}} />
+                <div className="detail-bar" style={{width: `${report.evidence_score * 100}%`}} />
               </div>
-              <span className="detail-val">{(report.detection_accuracy * 100).toFixed(0)}%</span>
+              <span className="detail-val">{(report.evidence_score * 100).toFixed(0)}%</span>
+            </div>
+            <div className="result-detail-row">
+              <span className="detail-label">Issue ID</span>
+              <div className="detail-bar-wrap">
+                <div className="detail-bar" style={{width: `${report.issue_identification_score * 100}%`}} />
+              </div>
+              <span className="detail-val">{(report.issue_identification_score * 100).toFixed(0)}%</span>
             </div>
             <div className="result-detail-row">
               <span className="detail-label">Decision</span>
               <span className={`detail-val ${report.decision_correct ? 'val-pass' : 'val-fail'}`}>
-                {report.decision_correct ? 'Correct' : 'Incorrect'}
+                {report.submitted_decision || 'none'} / {report.correct_decision}
               </span>
             </div>
             <div className="result-detail-row">
-              <span className="detail-label">Expected</span>
-              <span className="detail-val detail-val-list">{report.issues_expected?.join(', ').replace(/_/g, ' ')}</span>
+              <span className="detail-label">Relevant</span>
+              <span className="detail-val detail-val-list">{report.relevant_files?.join(', ')}</span>
             </div>
             <div className="result-detail-row">
-              <span className="detail-label">Detected</span>
-              <span className="detail-val detail-val-list">{report.issues_detected?.length > 0 ? report.issues_detected.join(', ').replace(/_/g, ' ') : 'None'}</span>
+              <span className="detail-label">Keywords</span>
+              <span className="detail-val detail-val-list">{report.keyword_hits?.length > 0 ? report.keyword_hits.join(', ') : 'None'}</span>
+            </div>
+            <div className="result-detail-row">
+              <span className="detail-label">Penalties</span>
+              <span className="detail-val detail-val-list">{report.penalties?.toFixed?.(2) ?? report.penalties}</span>
             </div>
           </div>
         )}

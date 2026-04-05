@@ -46,16 +46,17 @@ export default function App() {
       const data = await resetTask(selectedTask);
       setObservation(data.observation);
       setTaskInfo({
-        task_name: data.task_name,
+        task_id: data.task_id,
         difficulty: data.difficulty,
         description: data.description,
-        expected_issue_count: data.expected_issue_count,
+        issue_title: data.issue_title,
+        issue_body: data.issue_body,
       });
       setDone(false);
       setScore(null);
       setReport(null);
-      setState(null);
-      showToast(`Task "${data.task_name}" loaded — ${data.description}`, 'success');
+      setState(data.state);
+      showToast(`Task "${data.task_id}" loaded — ${data.issue_title}`, 'success');
     } catch (err) {
       const msg = err.response?.data?.error || 'Failed to start task';
       showToast(msg, 'error');
@@ -64,9 +65,9 @@ export default function App() {
     }
   };
 
-  const handleAction = useCallback(async (actionType, comment) => {
+  const handleAction = useCallback(async (actionType, payload) => {
     try {
-      const data = await stepAction(actionType, comment);
+      const data = await stepAction(actionType, payload);
       setObservation(data.observation);
       setState(data.state);
       setDone(data.done);
@@ -80,8 +81,9 @@ export default function App() {
           status === 'PASS' ? 'success' : 'error'
         );
       } else {
+        const suffix = payload?.path || payload?.text || actionType;
         showToast(
-          `${actionType} — reward: ${data.reward?.toFixed(4)}`,
+          `${suffix} — reward: ${data.reward?.toFixed(4)}`,
           'info'
         );
       }
@@ -103,11 +105,7 @@ export default function App() {
     while (!episodeDone && iterations < maxIterations) {
       iterations++;
       try {
-        const suggestion = await autoAction();
-        const data = await stepAction(
-          suggestion.action_type,
-          suggestion.comment || ''
-        );
+        const data = await autoAction();
         setObservation(data.observation);
         setState(data.state);
         setDone(data.done);
@@ -169,7 +167,7 @@ export default function App() {
           <div className="toolbar-info">
             <span className="toolbar-issues">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-              {taskInfo.expected_issue_count} issues to find
+                  {taskInfo.issue_title}
             </span>
           </div>
         )}
@@ -180,7 +178,7 @@ export default function App() {
           <PRViewer observation={observation} loading={loading} />
         </section>
         <section className="panel-right">
-          <ActionPanel onAction={handleAction} disabled={!observation || done} done={done} />
+          <ActionPanel observation={observation} onAction={handleAction} disabled={!observation || done} done={done} />
           <StateViewer state={state} done={done} taskInfo={taskInfo} />
           <ResultPanel score={score} report={report} />
         </section>

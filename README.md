@@ -1,241 +1,262 @@
-# 🔍 Code Review Assistant — Full-Stack Application
+---
+title: Code Review Assistant
+emoji: 🔍
+colorFrom: blue
+colorTo: purple
+sdk: docker
+app_port: 7860
+pinned: false
+license: mit
+tags:
+  - openenv
+---
 
-> **HumanEval for code review** — train and benchmark AI agents on the task senior engineers spend 40% of their time doing.
+# Code Review Assistant
 
-[![PyPI](https://img.shields.io/pypi/v/code-review-env)](https://pypi.org/project/code-review-env)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![OpenEnv Compatible](https://img.shields.io/badge/OpenEnv-compliant-blue)](openenv.yaml)
+An OpenEnv-compliant RL benchmark environment where AI agents review pull requests. The environment simulates the real-world task of code review: agents read PR metadata, inspect diffs and files, post review comments, and make an approve/reject/escalate decision — exactly what a human reviewer does on GitHub every day.
 
-## 📁 Project Structure
+No live GitHub access, no LLM judge in the scoring path. Tasks are offline JSON cases with deterministic, reproducible grading.
+
+## Environment Description & Motivation
+
+Code review is one of the most time-consuming tasks in software engineering. This environment lets AI agents practice it in a safe, offline, fully deterministic setting. Each episode is a self-contained PR case with:
+
+- A bug report (issue title + body)
+- A PR summary
+- Changed files with diffs
+- Additional context files
+
+The agent must investigate the PR, identify the defect, and make the correct decision — just like a real code reviewer.
+
+## Action Space
+
+Actions are typed via `ActionModel` (Pydantic `BaseModel`):
+
+| Action | Parameters | Effect |
+|--------|-----------|--------|
+| `inspect_diff` | `path` (required) | Reveals the diff for a changed file |
+| `inspect_file` | `path` (required) | Reveals full contents of any available file |
+| `comment` | `text` (required) | Posts a review comment (graded for keywords) |
+| `approve` | `text` (optional) | Approves the PR — **terminal** |
+| `reject` | `text` (optional) | Rejects the PR — **terminal** |
+| `escalate` | `text` (optional) | Escalates for human review — **terminal** |
+
+```python
+# Example action
+{"action_type": "inspect_diff", "path": "routes/admin.py"}
+```
+
+## Observation Space
+
+Observations are typed via `ObservationModel` (Pydantic `BaseModel`):
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `task_id` | `str` | Current task identifier |
+| `difficulty` | `str` | `easy`, `medium`, or `hard` |
+| `summary` | `str` | PR summary text |
+| `issue_title` | `str` | Bug report title |
+| `issue_body` | `str` | Bug report body |
+| `changed_files` | `list[str]` | Files with diffs available |
+| `available_files` | `list[str]` | All files available to inspect |
+| `available_actions` | `list[str]` | Valid action types |
+| `latest_event` | `dict` | Result of the last action (kind, title, content, path) |
+
+## State
+
+Returned by `state()`, typed via `StateModel`:
+
+| Field | Type |
+|-------|------|
+| `task_id` | `str` |
+| `current_step` | `int` |
+| `max_steps` | `int` |
+| `done` | `bool` |
+| `total_reward` | `float` |
+| `actions_taken` | `list[dict]` |
+| `inspected_diffs` | `list[str]` |
+| `inspected_files` | `list[str]` |
+| `final_decision` | `str \| null` |
+
+## Tasks
+
+Three offline PR review cases of increasing difficulty:
+
+### Easy — `easy_auth_001` (threshold 0.7)
+**Missing admin check on export endpoint.** A single-file PR where the authorization decorator was removed from an admin export route. The agent should inspect the diff, comment about the missing admin role check, and reject.
+
+### Medium — `medium_null_001` (threshold 0.6)
+**Null handling broken in service layer.** A two-file PR where the controller was patched but the background service still processes null emails. The agent must inspect both files to find the deeper bug, comment, and reject.
+
+### Hard — `hard_security_001` (threshold 0.5)
+**Auth fallback policy requires escalation.** A policy-sensitive change where a stale service token can bypass auth. The correct decision is to escalate for human review, not just reject. Requires reading both the code and the security policy document.
+
+## Reward Function
+
+Scores are deterministic and clamped to `[0.0, 1.0]`. Partial progress signals are provided at every step:
+
+| Component | Weight | Signal Type |
+|-----------|--------|-------------|
+| Relevant diff inspected | 0.15 | Partial progress |
+| Relevant file inspected | 0.10 | Partial progress |
+| Bug type identified in comment | 0.15 | Partial progress |
+| Root cause identified in comment | 0.10 | Partial progress |
+| Correct final decision | 0.50 | Terminal |
+
+**Penalties** (clamped so score never goes below 0.0):
+- Irrelevant file inspection: −0.05
+- Repeated action: −0.02
+- Hallucinated/irrelevant comment: −0.03
+
+## Baseline Scores
+
+Reproducible scores from the deterministic heuristic baseline (`python baseline.py`):
+
+| Task | Baseline Score | Status | Threshold |
+|------|---------------|--------|-----------|
+| `easy_auth_001` | **0.80** | PASS | 0.70 |
+| `medium_null_001` | **0.90** | PASS | 0.60 |
+| `hard_security_001` | **1.00** | PASS | 0.50 |
+
+RL agent scores after 1500 episodes of Q-learning (`python inference.py --agent rl`):
+
+| Task | RL Score | Status |
+|------|----------|--------|
+| `easy_auth_001` | **0.90** | PASS |
+| `medium_null_001` | **0.65** | PASS |
+| `hard_security_001` | **0.60** | PASS |
+
+## Project Structure
 
 ```
 meta/
-├── backend/           ← FastAPI Python backend (all core logic)
-│   ├── app.py                 # FastAPI server (JSON-only API)
-│   ├── baseline.py            # Baseline agents (stub + GPT-4)
-│   ├── inference.py           # Batch evaluation pipeline
+├── Dockerfile                  # Multi-stage build (Node + Python)
+├── README.md
+├── backend/
+│   ├── app.py                  # FastAPI server + static frontend serving
+│   ├── baseline.py             # Deterministic heuristic agent
+│   ├── openai_agent.py         # OpenAI API-based agent
+│   ├── inference.py            # Batch evaluation (heuristic / rl / openai)
+│   ├── train_rl.py             # Q-learning training CLI
+│   ├── eval_rl.py              # Q-learning evaluation CLI
+│   ├── openenv.yaml            # OpenEnv manifest
 │   ├── requirements.txt
-│   ├── scripts/               # Utility scripts
-│   │   └── test_pipeline.py   # End-to-end pipeline test
-│   ├── env/                   # Environment core
-│   ├── tasks/                 # Task definitions (easy/medium/hard)
-│   ├── grader/                # Grading system
-│   └── generator/             # PR data generators
-│
-├── frontend/          ← React (Vite) frontend
-│   ├── src/
-│   │   ├── App.jsx
-│   │   ├── components/        # TaskSelector, PRViewer, ActionPanel, etc.
-│   │   └── services/api.js    # Axios API layer
-│   ├── package.json
-│   └── vite.config.js
-│
-└── README.md
+│   ├── pyproject.toml
+│   ├── env/                    # OpenEnv environment
+│   │   ├── action.py           # ActionModel (Pydantic)
+│   │   ├── observation.py      # ObservationModel (Pydantic)
+│   │   ├── state.py            # StateModel (Pydantic)
+│   │   ├── reward.py           # Deterministic RewardEngine
+│   │   └── environment.py      # CodeReviewEnv (reset/step/state)
+│   ├── grader/                 # Episode grading
+│   │   ├── grader.py           # TaskGrader
+│   │   └── task_graders.py     # Factory
+│   ├── tasks/                  # Task registry + JSON data
+│   │   ├── data/
+│   │   │   ├── easy_auth_001.json
+│   │   │   ├── medium_null_001.json
+│   │   │   └── hard_security_001.json
+│   │   ├── loader.py
+│   │   └── task_registry.py
+│   └── rl/                     # Reinforcement learning
+│       ├── action_space.py     # Discrete macro-action adapter
+│       └── q_learning.py       # Tabular Q-learning agent
+└── frontend/                   # React UI
+    ├── src/
+    │   ├── App.jsx
+    │   ├── components/
+    │   └── services/api.js
+    ├── package.json
+    └── vite.config.js
 ```
 
-## 🚀 Getting Started
+## Setup & Usage
 
-### Backend
+### Local development
+
+```bash
+# Backend
+cd backend
+python -m venv venv && source venv/bin/activate
+pip install -r requirements.txt
+uvicorn app:app --reload --port 8000
+
+# Frontend (separate terminal)
+cd frontend
+npm install
+VITE_API_URL=http://localhost:8000 npm run dev
+```
+
+### Run baseline evaluation
 
 ```bash
 cd backend
-
-# Create and activate virtual environment
-python -m venv venv
-venv\Scripts\activate  # On Windows
-# source venv/bin/activate  # On Linux/Mac
-
-# Install dependencies
-pip install -r requirements.txt
-
-# Start the server
-uvicorn app:app --reload --port 8000
-```
-
-### Frontend
-
-```bash
-cd frontend
-npm install
-npm run dev
-```
-
-Open `http://localhost:5173` in your browser.
-
-### API Routes
-
-| Method | Endpoint            | Description                  |
-|--------|---------------------|------------------------------|
-| GET    | `/api/tasks`        | List available tasks         |
-| POST   | `/api/reset/{task}` | Reset env with a task        |
-| POST   | `/api/step`         | Execute an action            |
-| GET    | `/api/state`        | Get current environment state|
-| POST   | `/api/auto_action`  | AI-suggested next action     |
-
----
-
-## 🎯 What Is This?
-
-An **OpenEnv-compliant reinforcement learning benchmark** where AI agents review pull requests:
-
-1. Receive a PR diff as observation
-2. Navigate files, identify issues (bugs, security flaws, style problems)
-3. Leave comments and make approve/reject decisions
-4. Get scored 0.0 → 1.0 based on accuracy
-
----
-
-## ⚡ Quickstart
-
-```bash
-pip install code-review-env
-
-# Run baseline (no API key needed)
 python baseline.py --task all
-
-# Output:
-# Task easy    : 0.7500  [PASS]
-# Task medium  : 0.6200  [PASS]
-# Task hard    : 0.5100  [PASS]
+python inference.py --agent heuristic
 ```
 
-```python
-from env.environment import CodeReviewEnv
-from tasks.task_registry import load_task
-
-env = CodeReviewEnv()
-obs = env.reset(task="medium")
-
-obs, reward, done, info = env.step({
-    "action_type": "comment_issue",
-    "comment": "sql_injection detected in login.py"
-})
-
-state = env.state()
-```
-
----
-
-## 🏗️ Project Structure
-
-```
-code-review-env/
-├── env/
-│   ├── environment.py     # Core env: reset / step / state
-│   ├── action.py          # Pydantic ActionModel
-│   ├── observation.py     # Pydantic ObservationModel
-│   ├── state.py           # Pydantic StateModel
-│   ├── schema.py          # validate_action / validate_observation / validate_state
-│   └── reward.py          # RewardEngine
-├── generator/
-│   └── pr_generator.py    # Deterministic PR generator (easy/medium/hard)
-├── tasks/
-│   ├── task_easy.py       # Style & documentation review
-│   ├── task_medium.py     # Security bug detection
-│   ├── task_hard.py       # Auth bypass + performance regression
-│   └── task_registry.py   # TASK_REGISTRY, load_task(), get_available_tasks()
-├── grader/
-│   ├── grader.py          # Base TaskGrader
-│   ├── task_graders.py    # Easy/Medium/Hard graders + GRADER_REGISTRY
-│   └── score_utils.py     # clamp_score, detection/decision accuracy
-├── baseline.py            # Deterministic baseline agent (+ optional GPT-4)
-├── inference.py           # Batch inference loop
-├── app.py                 # Gradio web UI (HuggingFace Spaces)
-├── openenv.yaml           # OpenEnv validator config
-├── Dockerfile             # Container deployment
-└── pyproject.toml         # PyPI packaging
-```
-
----
-
-## 📊 The Three Tasks
-
-| Task | Difficulty | Issues | Pass Threshold | GPT-4 Baseline |
-|------|-----------|--------|---------------|----------------|
-| Style & Documentation | Easy | missing_docstring, unused_variable | ≥ 0.70 | ~0.75 |
-| Bug Detection & Tests | Medium | sql_injection, missing_unit_tests, logic_bug | ≥ 0.60 | ~0.62 |
-| Complex Refactoring | Hard | authentication_bypass, performance_regression, flaky_test_behavior | ≥ 0.50 | ~0.51 |
-
----
-
-## 🎮 Actions
-
-| Action | Description | Reward |
-|--------|-------------|--------|
-| `view_file` | Read the PR file | 0.00 |
-| `comment_issue` | Flag a detected issue | +0.10 (hit) / −0.05 (miss) |
-| `request_changes` | Reject the PR | +0.30 |
-| `approve_pr` | Approve the PR | +0.30 (correct) / −0.40 (incorrect) |
-
----
-
-## 🧪 Inference Pipeline
+### Run with OpenAI API
 
 ```bash
-python inference.py
-
-# [START] task=easy
-# [STEP]  task=easy step=0 action=view_file reward=0.0000
-# [STEP]  task=easy step=1 action=comment_issue reward=0.1000
-# [RESULT] task=style_documentation_review score=0.7500 status=PASS
-# [END]   final_score=0.7500
+cd backend
+export OPENAI_API_KEY="sk-..."
+python inference.py --agent openai --model gpt-4o-mini
 ```
 
----
-
-## 🚀 Gradio Web Demo
+### Train & evaluate RL agent
 
 ```bash
-pip install "code-review-env[ui]"
-python app.py
-# → http://localhost:7860
+cd backend
+python train_rl.py --episodes 1500
+python eval_rl.py --checkpoint checkpoints/q_learning_policy.json
+python inference.py --agent rl
 ```
 
-Or deploy to HuggingFace Spaces using the included `Dockerfile`.
+### Pipeline test
 
----
+```bash
+cd backend
+python scripts/test_pipeline.py
+```
 
-## 🐳 Docker
+## Docker
 
 ```bash
 docker build -t code-review-env .
 docker run -p 7860:7860 code-review-env
+# Open http://localhost:7860
 ```
 
----
+## Deploy to Hugging Face Spaces
 
-## 🔧 OpenAI Baseline
+1. Create a new Space at [huggingface.co/new-space](https://huggingface.co/new-space) — select **Docker** SDK.
+2. Push this repository:
+   ```bash
+   cd meta
+   git init && git add . && git commit -m "Initial deploy"
+   git remote add origin https://huggingface.co/spaces/YOUR_USERNAME/code-review-assistant
+   git push origin main
+   ```
+3. The Space auto-builds and serves at `https://YOUR_USERNAME-code-review-assistant.hf.space`.
 
-```bash
-export OPENAI_API_KEY="sk-..."
-python baseline.py --task all --agent gpt4
-```
+## OpenEnv Spec
 
----
+The environment implements the full OpenEnv interface:
 
-## 📐 Schema Validation
+- **Typed models**: `ActionModel`, `ObservationModel`, `StateModel` (all Pydantic `BaseModel`)
+- **`reset(task)`** → returns initial observation dict
+- **`step(action)`** → returns `(observation, reward, done, info)`
+- **`state()`** → returns current state dict
+- **`openenv.yaml`** — environment metadata, action/observation schemas, task list, grader config
 
-```python
-from env.schema import validate_action, validate_observation, validate_state
+## API Endpoints
 
-action = validate_action({"action_type": "approve_pr"})
-# Raises ValidationError for invalid action types
-```
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/api/tasks` | List all task metadata |
+| `POST` | `/api/reset/{task_id}` | Start an episode |
+| `POST` | `/api/step` | Execute an action |
+| `GET` | `/api/state` | Get current state |
+| `POST` | `/api/auto_action` | Baseline agent picks next action |
 
----
-
-## 📚 Citation
-
-```bibtex
-@software{code_review_env_2024,
-  title  = {Code Review Assistant: An OpenEnv Environment for AI Code Review Agents},
-  year   = {2024},
-  url    = {https://github.com/username/code-review-env}
-}
-```
-
----
-
-## 📄 License
-
-MIT
+The container starts the FastAPI backend on port `7860`, which is compatible with a Hugging Face Docker Space contest deployment.

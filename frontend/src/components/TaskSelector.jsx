@@ -44,7 +44,7 @@ export default function TaskSelector({ onSelect, onStart, disabled, loading, sel
             <option value="">Select difficulty...</option>
             {tasks.map((t) => (
               <option key={t.id} value={t.id}>
-                {t.icon} {t.label} — {t.desc}
+                {t.icon} {t.label} — {t.issue_title}
               </option>
             ))}
           </select>

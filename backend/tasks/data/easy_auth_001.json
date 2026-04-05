@@ -1,0 +1,40 @@
+{
+  "id": "easy_auth_001",
+  "label": "Easy",
+  "difficulty": "easy",
+  "description": "Single-file authorization regression with an obvious missing admin check.",
+  "summary": "A PR introduces an export endpoint for admin reports. The diff adds authentication but never verifies the caller has the admin role.",
+  "issue_title": "Fix missing admin check",
+  "issue_body": "Users without admin role can access the export endpoint after this patch because the handler only checks for authentication.",
+  "changed_files": [
+    "routes/admin.py"
+  ],
+  "diffs": {
+    "routes/admin.py": "@@\n-@router.get(\"/reports/export\")\n-def export_reports(user=Depends(require_user)):\n-    if not user:\n-        raise HTTPException(status_code=401, detail=\"login required\")\n+@router.get(\"/reports/export\")\n+def export_reports(user=Depends(require_user)):\n+    if not user:\n+        raise HTTPException(status_code=401, detail=\"login required\")\n     return export_service.run()"
+  },
+  "files": {
+    "routes/admin.py": "from fastapi import APIRouter, Depends, HTTPException\n\nfrom auth import require_user\nfrom services.export_service import export_service\n\nrouter = APIRouter()\n\n\n@router.get(\"/reports/export\")\ndef export_reports(user=Depends(require_user)):\n    if not user:\n        raise HTTPException(status_code=401, detail=\"login required\")\n    return export_service.run()\n"
+  },
+  "ground_truth": {
+    "correct_decision": "reject",
+    "relevant_files": [
+      "routes/admin.py"
+    ],
+    "bug_type": "authorization",
+    "keywords": [
+      "admin check",
+      "authorization",
+      "role validation",
+      "is_admin",
+      "forbidden"
+    ],
+    "root_cause_keywords": [
+      "missing admin role check",
+      "authenticated user can export",
+      "role validation absent"
+    ],
+    "uncertain": false
+  },
+  "pass_threshold": 0.7,
+  "max_steps": 6
+}

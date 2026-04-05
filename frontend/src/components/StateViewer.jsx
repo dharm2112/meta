@@ -17,7 +17,7 @@ export default function StateViewer({ state, done, taskInfo }) {
             <div className="session-task-row">
               <span className="session-task-label">Task</span>
               <span className={`diff-badge diff-${taskInfo.difficulty}`}>{taskInfo.difficulty}</span>
-              <span className="session-task-desc">{taskInfo.description}</span>
+              <span className="session-task-desc">{taskInfo.issue_title}</span>
             </div>
           )}
 
@@ -28,15 +28,26 @@ export default function StateViewer({ state, done, taskInfo }) {
             </div>
             <div className="stat-box">
               <span className="stat-number stat-reward">{state?.total_reward?.toFixed(2) ?? '0.00'}</span>
-              <span className="stat-label">Reward</span>
+              <span className="stat-label">Score</span>
             </div>
             <div className="stat-box">
               <span className={`stat-number ${done ? 'stat-done' : 'stat-active'}`}>
-                {done ? 'Done' : state ? 'Active' : '—'}
+                {state?.final_decision ? state.final_decision : done ? 'Done' : state ? 'Active' : '—'}
               </span>
-              <span className="stat-label">Status</span>
+              <span className="stat-label">Decision</span>
             </div>
           </div>
+
+          {state && (
+            <div className="pr-issues-bar">
+              <span className="pr-issues-label">Evidence gathered</span>
+              <div className="pr-issues-tags">
+                {state.inspected_diffs?.map((path) => <span key={`diff-${path}`} className="issue-chip">diff:{path}</span>)}
+                {state.inspected_files?.map((path) => <span key={`file-${path}`} className="issue-chip">file:{path}</span>)}
+                {!state.inspected_diffs?.length && !state.inspected_files?.length && <span className="issue-chip">none yet</span>}
+              </div>
+            </div>
+          )}
 
           {state?.actions_taken && state.actions_taken.length > 0 && (
             <div className="history-section">
@@ -55,8 +66,11 @@ export default function StateViewer({ state, done, taskInfo }) {
                         </span>
                         <span className="timeline-step">Step {a.step}</span>
                       </div>
-                      {a.comment && (
-                        <p className="timeline-comment">{a.comment}</p>
+                      {a.path && (
+                        <p className="timeline-comment">{a.path}</p>
+                      )}
+                      {a.text && (
+                        <p className="timeline-comment">{a.text}</p>
                       )}
                     </div>
                   </div>

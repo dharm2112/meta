@@ -13,7 +13,7 @@ export default function Header({ taskInfo, done }) {
         </div>
         <div>
           <h1 className="header-title">Code Review Assistant</h1>
-          <p className="header-sub">AI-Powered Code Review Environment</p>
+          <p className="header-sub">Deterministic Offline PR Review Environment</p>
         </div>
       </div>
       <div className="header-right">
@@ -22,7 +22,7 @@ export default function Header({ taskInfo, done }) {
             <span className={`diff-badge diff-${taskInfo.difficulty}`}>
               {taskInfo.difficulty.toUpperCase()}
             </span>
-            <span className="header-task-name">{taskInfo.description}</span>
+            <span className="header-task-name">{taskInfo.issue_title}</span>
             <span className={`status-dot ${done ? 'completed' : 'active'}`} />
             <span className="header-status-text">{done ? 'Completed' : 'Active'}</span>
           </div>

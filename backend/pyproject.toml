@@ -6,7 +6,7 @@ build-backend = "setuptools.backends.legacy:build"
 name = "code-review-env"
 version = "1.0.0"
 description = "OpenEnv-compliant RL benchmark environment for AI code review agents"
-readme = "README.md"
+readme = { text = "Deterministic offline PR review benchmark for AI agents.", content-type = "text/markdown" }
 license = { text = "MIT" }
 requires-python = ">=3.10"
 keywords = ["reinforcement-learning", "code-review", "benchmark", "openenv", "llm"]
@@ -18,16 +18,22 @@ classifiers = [
 dependencies = [
     "pydantic>=2.0",
     "pyyaml>=6.0",
+    "fastapi>=0.100.0",
+    "uvicorn>=0.23.0",
 ]
 
 [project.optional-dependencies]
-gpt4 = ["openai>=1.0"]
-ui   = ["gradio>=4.0"]
-all  = ["openai>=1.0", "gradio>=4.0"]
+openai = ["openai>=1.0"]
+all = ["openai>=1.0"]
 
 [project.scripts]
 code-review-baseline  = "baseline:main"
+code-review-train-rl = "train_rl:main"
+code-review-eval-rl = "eval_rl:main"
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["env*", "generator*", "grader*", "tasks*"]
+include = ["env*", "grader*", "tasks*", "rl*"]
+
+[tool.setuptools.package-data]
+tasks = ["data/*.json"]

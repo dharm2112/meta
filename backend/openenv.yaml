@@ -1,6 +1,6 @@
 name: code-review-env
 version: "1.0.0"
-description: "OpenEnv-compliant RL benchmark for AI-powered code review agents"
+description: "Deterministic offline PR review benchmark for AI agents"
 author: "Code Review Assistant Team"
 
 environment:
@@ -17,10 +17,15 @@ environment:
 observation:
   type: dict
   fields:
-    file_name: str
-    diff: str
-    issues: list[str]
-    metadata: dict
+    task_id: str
+    difficulty: str
+    summary: str
+    issue_title: str
+    issue_body: str
+    changed_files: list[str]
+    available_files: list[str]
+    available_actions: list[str]
+    latest_event: dict
 
 action:
   type: dict
@@ -28,46 +33,40 @@ action:
     action_type:
       type: str
       allowed:
-        - view_file
-        - comment_issue
-        - approve_pr
-        - request_changes
-    comment:
+        - inspect_diff
+        - inspect_file
+        - comment
+        - approve
+        - reject
+        - escalate
+    path:
+      type: str
+      required: false
+    text:
       type: str
       required: false
 
 tasks:
-  - name: easy
-    module: tasks.task_easy
-    class: TaskEasy
-    description: "Style and documentation review"
+  - name: easy_auth_001
+    module: tasks.loader
+    class: json
+    description: "Missing admin check on export endpoint"
     pass_threshold: 0.7
-    max_steps: 10
-    expected_issues:
-      - missing_docstring
-      - unused_variable
+    max_steps: 6
 
-  - name: medium
-    module: tasks.task_medium
-    class: TaskMedium
-    description: "Security bug detection and test coverage"
+  - name: medium_null_001
+    module: tasks.loader
+    class: json
+    description: "Null handling remains broken in service layer"
     pass_threshold: 0.6
-    max_steps: 10
-    expected_issues:
-      - sql_injection
-      - missing_unit_tests
-      - logic_bug
+    max_steps: 7
 
-  - name: hard
-    module: tasks.task_hard
-    class: TaskHard
-    description: "Complex refactoring with auth bypass and performance regression"
+  - name: hard_security_001
+    module: tasks.loader
+    class: json
+    description: "Auth fallback policy requires escalation"
     pass_threshold: 0.5
-    max_steps: 10
-    expected_issues:
-      - authentication_bypass
-      - performance_regression
-      - flaky_test_behavior
+    max_steps: 7
 
 grader:
   module: grader.task_graders
@@ -78,6 +77,6 @@ baseline:
   agent: BaselineAgent
   module: baseline
   scores:
-    easy: 0.75
-    medium: 0.62
-    hard: 0.51
+    easy_auth_001: 1.0
+    medium_null_001: 1.0
+    hard_security_001: 1.0

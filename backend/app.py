@@ -1,21 +1,19 @@
-"""FastAPI backend for the Code Review Assistant — JSON-only API."""
+"""FastAPI backend for the offline PR review environment."""
 
 from __future__ import annotations
+
+from pathlib import Path
+
 from fastapi import FastAPI
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, FileResponse
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 import uvicorn
-import os
-import json
 
-try:
-    from groq import Groq
-except ImportError:
-    Groq = None
-
+from baseline import BaselineAgent
 from env.environment import CodeReviewEnv
-from tasks.task_registry import get_available_tasks, load_task
+from tasks.task_registry import get_available_tasks, get_task_catalog, load_task
 from grader.task_graders import get_grader
 
 app = FastAPI(title="Code Review Assistant API")
@@ -26,25 +24,38 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Built frontend directory (populated by Docker build)
+STATIC_DIR = Path(__file__).resolve().parent / "static"
+
 # Session state (single user demo)
 _env = CodeReviewEnv()
 _session: dict = {}
+_baseline_agent = BaselineAgent()
 
 
 class ActionRequest(BaseModel):
     action_type: str
-    comment: str = ""
+    path: str | None = None
+    text: str | None = None
 
 
 @app.get("/api/tasks")
 def get_tasks():
-    tasks = get_available_tasks()
-    meta = {
-        "easy":   {"label": "Easy",   "icon": "🟢", "desc": "Style & documentation review"},
-        "medium": {"label": "Medium", "icon": "🟡", "desc": "Security bug detection"},
-        "hard":   {"label": "Hard",   "icon": "🔴", "desc": "Auth bypass & performance issues"},
-    }
-    return {"tasks": [{"id": t, **meta[t]} for t in tasks]}
+    meta = {"easy": "🟢", "medium": "🟡", "hard": "🔴"}
+    tasks = []
+    for item in get_task_catalog():
+        tasks.append(
+            {
+                "id": item["id"],
+                "label": item["label"],
+                "difficulty": item["difficulty"],
+                "icon": meta[item["difficulty"]],
+                "desc": item["description"],
+                "issue_title": item["issue_title"],
+                "pass_threshold": item["pass_threshold"],
+            }
+        )
+    return {"tasks": tasks}
 
 
 @app.post("/api/reset/{task_name}")
@@ -57,10 +68,12 @@ def reset(task_name: str):
     _session.update({"task_name": task_name, "task": task, "grader": grader, "obs": obs, "done": False})
     return {
         "observation": obs,
-        "task_name": task_name,
-        "difficulty": task.get_difficulty(),
-        "description": task.get_description(),
-        "expected_issue_count": len(task.get_expected_issues()),
+        "state": _env.state(),
+        "task_id": task["id"],
+        "difficulty": task["difficulty"],
+        "description": task["description"],
+        "issue_title": task["issue_title"],
+        "issue_body": task["issue_body"],
     }
 
 
@@ -72,8 +85,10 @@ def step(req: ActionRequest):
         return JSONResponse(status_code=400, content={"error": "Episode done. Reset first."})
 
     action = {"action_type": req.action_type}
-    if req.comment:
-        action["comment"] = req.comment
+    if req.path:
+        action["path"] = req.path
+    if req.text:
+        action["text"] = req.text
 
     try:
         obs, reward, done, info = _env.step(action)
@@ -112,68 +127,31 @@ def get_state():
 
 @app.post("/api/auto_action")
 def auto_action():
-    if not _session or _session.get("done"):
-        return JSONResponse(status_code=400, content={"error": "Invalid session or episode already done. Reset first."})
+    """Let the heuristic baseline agent pick the next action and execute it."""
+    if not _session:
+        return JSONResponse(status_code=400, content={"error": "Call /api/reset first"})
+    if _session.get("done"):
+        return JSONResponse(status_code=400, content={"error": "Episode done. Reset first."})
+    obs = _session["obs"]
+    state = _env.state()
+    action = _baseline_agent.act(obs, state)
+    result = step(ActionRequest(**action))
+    # Include the chosen action so the frontend knows what was done
+    result["action"] = action
+    return result
 
-    api_key = os.getenv("GROQ_API_KEY")
-    if not api_key:
-        return JSONResponse(status_code=400, content={"error": "GROQ_API_KEY environment variable is missing on server!"})
 
-    if Groq is None:
-        return JSONResponse(status_code=500, content={"error": "Groq package not installed. Run pip install groq"})
+# ── Serve built frontend (production / Docker) ──────────────────────
+if STATIC_DIR.is_dir():
+    app.mount("/assets", StaticFiles(directory=str(STATIC_DIR / "assets")), name="assets")
 
-    try:
-        client = Groq(api_key=api_key)
-        state_dict = _env.state()
-        obs = _session.get("obs", {})
-
-        system_prompt = """You are an automated code review AI agent.
-Your goal is to review a Pull Request diff. You can read, comment on issues, request changes, or approve the PR.
-You MUST return your decision as a valid JSON object matching exactly this schema:
-{"action_type": "view_file" | "comment_issue" | "approve_pr" | "request_changes", "comment": "explain the issue if action_type is comment_issue"}
-
-Do not include any other text, markdown, or explanation, just the raw JSON object.
-"""
-        user_prompt = f"""
-Currently available information:
-Diff:
-{obs.get('diff', 'None')}
-
-Target Issues:
-{obs.get('issues', [])}
-
-Actions taken so far by you:
-{state_dict.get('actions_taken', [])}
-
-Determine the very next logical step. If you haven't commented on the known issues, do so now one by one. If all found, request changes. If non found, approve.
-Respond ONLY with JSON.
-"""
-
-        chat_completion = client.chat.completions.create(
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt}
-            ],
-            model="llama3-8b-8192",
-            temperature=0.0
-        )
-
-        content = chat_completion.choices[0].message.content.strip()
-        if content.startswith("```json"):
-            content = content[7:-3]
-        if content.startswith("```"):
-            content = content[3:-3]
-
-        data = json.loads(content)
-
-        valid_actions = ["view_file", "comment_issue", "approve_pr", "request_changes"]
-        if data.get("action_type") not in valid_actions:
-            data["action_type"] = "view_file"
-
-        return data
-
-    except Exception as e:
-        return JSONResponse(status_code=500, content={"error": str(e)})
+    @app.get("/{full_path:path}")
+    def serve_spa(full_path: str):
+        """SPA fallback: serve index.html for any non-API route."""
+        target = STATIC_DIR / full_path
+        if full_path and target.is_file():
+            return FileResponse(str(target))
+        return FileResponse(str(STATIC_DIR / "index.html"))
 
 
 if __name__ == "__main__":

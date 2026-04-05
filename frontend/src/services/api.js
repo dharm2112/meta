@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+const API_BASE = import.meta.env.VITE_API_URL || '';
 
 const api = axios.create({
   baseURL: API_BASE,
@@ -17,8 +17,8 @@ export async function resetTask(taskName) {
   return res.data;
 }
 
-export async function stepAction(actionType, comment = '') {
-  const res = await api.post('/api/step', { action_type: actionType, comment });
+export async function stepAction(actionType, payload = {}) {
+  const res = await api.post('/api/step', { action_type: actionType, ...payload });
   return res.data;
 }
 

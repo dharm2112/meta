@@ -1,0 +1,42 @@
+{
+  "id": "medium_null_001",
+  "label": "Medium",
+  "difficulty": "medium",
+  "description": "Two-file null-handling task where the diff looks safe but the service layer still fails.",
+  "summary": "A controller patch adds a null guard before scheduling profile syncs. Hidden failure reports mention that background jobs still reach the service with a missing email.",
+  "issue_title": "Fix null handling for profile sync",
+  "issue_body": "The patch guards one request path, but reports still fail when the sync service receives a missing email from background jobs.",
+  "changed_files": [
+    "api/profile.py"
+  ],
+  "diffs": {
+    "api/profile.py": "@@\n-    payload = request.json()\n-    sync_profile.delay(payload.get(\"email\"))\n+    payload = request.json()\n+    email = payload.get(\"email\")\n+    if email is None:\n+        return {\"queued\": false, \"reason\": \"missing email\"}, 400\n+    sync_profile.delay(email)"
+  },
+  "files": {
+    "api/profile.py": "from flask import Blueprint, request\n\nfrom services.profile_sync import sync_profile\n\nbp = Blueprint(\"profile\", __name__)\n\n\n@bp.post(\"/profile/sync\")\ndef schedule_profile_sync():\n    payload = request.json()\n    email = payload.get(\"email\")\n    if email is None:\n        return {\"queued\": False, \"reason\": \"missing email\"}, 400\n    sync_profile.delay(email)\n    return {\"queued\": True}, 202\n",
+    "services/profile_sync.py": "def normalize_email(email):\n    return email.strip().lower()\n\n\ndef sync_profile(email):\n    normalized = normalize_email(email)\n    publish_profile_update(normalized)\n"
+  },
+  "ground_truth": {
+    "correct_decision": "reject",
+    "relevant_files": [
+      "api/profile.py",
+      "services/profile_sync.py"
+    ],
+    "bug_type": "null_handling",
+    "keywords": [
+      "null",
+      "none",
+      "email",
+      "service layer",
+      "background jobs"
+    ],
+    "root_cause_keywords": [
+      "service still lowercases missing email",
+      "controller guard does not protect background jobs",
+      "missing null handling in service"
+    ],
+    "uncertain": false
+  },
+  "pass_threshold": 0.6,
+  "max_steps": 7
+}
