@@ -21,8 +21,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Backend source
 COPY backend/ ./
 
-# Install as package so all local modules (env, rl, tasks, grader) are importable
-RUN pip install --no-cache-dir .
+# Add backend dir to Python path via .pth file (reliable across all contexts)
+RUN echo "/app/backend" > "$(python -c 'import site; print(site.getsitepackages()[0])')/backend.pth"
 
 # Built frontend → backend/static (FastAPI serves it)
 COPY --from=frontend-build /build/dist ./static
