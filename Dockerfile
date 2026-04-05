@@ -25,7 +25,7 @@ COPY backend/ ./
 COPY --from=frontend-build /build/dist ./static
 
 # Pre-train RL checkpoint so the demo works out of the box
-RUN PYTHONPATH=/app/backend python train_rl.py --episodes 1000
+RUN python train_rl.py --episodes 1000
 
 EXPOSE 7860
 ENV PORT=7860

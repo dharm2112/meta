@@ -2,6 +2,13 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
+import sys
+
+# Ensure the backend directory is on sys.path (needed in Docker builds)
+_backend_dir = os.path.dirname(os.path.abspath(__file__))
+if _backend_dir not in sys.path:
+    sys.path.insert(0, _backend_dir)
 
 from rl.q_learning import evaluate_agent, train_agent
 
