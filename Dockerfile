@@ -20,6 +20,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Backend source
 COPY backend/ ./
 
+# Ensure local packages are importable
+ENV PYTHONPATH=/app/backend
+
 # Built frontend → backend/static (FastAPI serves it)
 COPY --from=frontend-build /build/dist ./static
 
