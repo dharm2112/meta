@@ -28,7 +28,6 @@ RUN echo "/app/backend" > "$(python -c 'import site; print(site.getsitepackages(
 COPY --from=frontend-build /build/dist ./static
 
 # Pre-train RL checkpoint so the demo works out of the box
-RUN ls -la /app/backend/ && echo "---env dir---" && ls -la /app/backend/env/ 2>&1 || echo "ENV DIR MISSING" && echo "---sys.path---" && python -c "import sys; print(sys.path)"
 RUN python train_rl.py --episodes 1000
 
 EXPOSE 7860
