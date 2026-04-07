@@ -1,6 +1,10 @@
 # ── Stage 1: build React frontend ────────────────────────────────────
 FROM node:20-slim AS frontend-build
 WORKDIR /build
+
+# Cache bust: increment when frontend changes need rebuild
+ARG FRONTEND_VERSION=2
+
 COPY frontend/package.json frontend/package-lock.json* ./
 RUN npm ci --legacy-peer-deps
 COPY frontend/ ./
