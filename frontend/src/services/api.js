@@ -32,4 +32,28 @@ export async function autoAction() {
   return res.data;
 }
 
+export async function uploadCode(title, description, files, originalFiles = []) {
+  const formData = new FormData();
+  formData.append('title', title);
+  formData.append('description', description);
+  
+  files.forEach(file => {
+    formData.append('files', file);
+  });
+  
+  originalFiles.forEach(file => {
+    formData.append('original_files', file);
+  });
+  
+  const res = await api.post('/api/upload', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  });
+  return res.data;
+}
+
+export async function deleteUpload(taskId) {
+  const res = await api.delete(`/api/upload/${taskId}`);
+  return res.data;
+}
+
 export default api;

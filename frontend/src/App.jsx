@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react';
 import Header from './components/Header';
 import TaskSelector from './components/TaskSelector';
+import UploadPanel from './components/UploadPanel';
 import PRViewer from './components/PRViewer';
 import ActionPanel from './components/ActionPanel';
 import StateViewer from './components/StateViewer';
@@ -19,6 +20,7 @@ export default function App() {
   const [toast, setToast] = useState(null);
   const [loading, setLoading] = useState(false);
   const [autoPilotRunning, setAutoPilotRunning] = useState(false);
+  const [refreshTasks, setRefreshTasks] = useState(0);
 
   const showToast = (message, type = 'info') => {
     setToast({ message, type });
@@ -51,18 +53,28 @@ export default function App() {
         description: data.description,
         issue_title: data.issue_title,
         issue_body: data.issue_body,
+        is_custom_upload: data.is_custom_upload,
       });
       setDone(false);
       setScore(null);
       setReport(null);
       setState(data.state);
-      showToast(`Task "${data.task_id}" loaded — ${data.issue_title}`, 'success');
+      const taskType = data.is_custom_upload ? '📤 Custom' : '';
+      showToast(`${taskType} Task "${data.task_id}" loaded — ${data.issue_title}`, 'success');
     } catch (err) {
       const msg = err.response?.data?.error || 'Failed to start task';
       showToast(msg, 'error');
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleUploadComplete = (result) => {
+    showToast(`Uploaded! Task "${result.task_id}" created. Select it from the dropdown.`, 'success');
+    // Trigger task list refresh
+    setRefreshTasks(prev => prev + 1);
+    // Auto-select the new task
+    setSelectedTask(result.task_id);
   };
 
   const handleAction = useCallback(async (actionType, payload) => {
@@ -76,9 +88,10 @@ export default function App() {
         setScore(data.score);
         setReport(data.report);
         const status = data.report?.grade_status || '';
+        const statusType = status === 'PASS' || status === 'REVIEWED' ? 'success' : 'error';
         showToast(
           `Episode finished! Score: ${(data.score * 100).toFixed(1)}% — ${status}`,
-          status === 'PASS' ? 'success' : 'error'
+          statusType
         );
       } else {
         const suffix = payload?.path || payload?.text || actionType;
@@ -115,9 +128,10 @@ export default function App() {
           setScore(data.score);
           setReport(data.report);
           const status = data.report?.grade_status || '';
+          const statusType = status === 'PASS' || status === 'REVIEWED' ? 'success' : 'error';
           showToast(
             `Auto-pilot finished! Score: ${(data.score * 100).toFixed(1)}% — ${status}`,
-            status === 'PASS' ? 'success' : 'error'
+            statusType
           );
         }
       } catch (err) {
@@ -149,6 +163,11 @@ export default function App() {
           disabled={loading || autoPilotRunning}
           loading={loading}
           selectedTask={selectedTask}
+          refreshKey={refreshTasks}
+        />
+        <UploadPanel
+          onUploadComplete={handleUploadComplete}
+          disabled={loading || autoPilotRunning}
         />
         {observation && !done && (
           <button

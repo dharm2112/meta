@@ -253,10 +253,54 @@ The environment implements the full OpenEnv interface:
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `GET` | `/api/tasks` | List all task metadata |
+| `GET` | `/api/tasks` | List all task metadata (static + uploaded) |
 | `POST` | `/api/reset/{task_id}` | Start an episode |
 | `POST` | `/api/step` | Execute an action |
 | `GET` | `/api/state` | Get current state |
 | `POST` | `/api/auto_action` | Baseline agent picks next action |
+| `POST` | `/api/upload` | Upload custom code for review |
+| `DELETE` | `/api/upload/{task_id}` | Delete an uploaded task |
 
 The container starts the FastAPI backend on port `7860`, which is compatible with a Hugging Face Docker Space contest deployment.
+
+## Custom Code Upload
+
+You can upload your own code files for the AI agent to review. This enables dynamic code review scenarios beyond the built-in tasks.
+
+### Upload via UI
+
+1. Click **"Upload Custom Code"** in the toolbar
+2. Fill in the PR title and description
+3. Drag & drop or select modified files
+4. Optionally add original file versions for automatic diff generation
+5. Click **"Upload & Create Task"**
+6. Select the new task from the dropdown and start reviewing
+
+### Upload via API
+
+```bash
+# Upload files for review
+curl -X POST http://localhost:8000/api/upload \
+  -F "title=Fix authentication bug" \
+  -F "description=Remove admin check from public endpoint" \
+  -F "files=@path/to/modified_file.py" \
+  -F "original_files=@path/to/original_file.py"
+
+# Response:
+# {
+#   "task_id": "upload_20240407_120000_abc12345",
+#   "label": "Fix authentication bug",
+#   "changed_files": ["modified_file.py"],
+#   "message": "Task created successfully..."
+# }
+
+# Start review session with uploaded task
+curl -X POST http://localhost:8000/api/reset/upload_20240407_120000_abc12345
+```
+
+### Upload Limits
+
+- Maximum 10 files per upload
+- Maximum 1MB per file
+- Uploaded tasks expire after 1 hour (configurable)
+- Grading uses "review_only" mode (scores coverage, not correctness)
