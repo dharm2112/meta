@@ -74,18 +74,26 @@ class QLearningReviewAgent:
         self.epsilon = max(self.epsilon_min, self.epsilon * self.epsilon_decay)
 
     def state_key(self, observation: Dict[str, object], state: Dict[str, object]) -> str:
+        """
+        Generate unique state key for Q-table lookup.
+        Optimized to use tuple hashing instead of JSON serialization.
+        """
         latest_event = observation.get("latest_event", {}) or {}
         comment_count = sum(1 for action in state.get("actions_taken", []) if action.get("action_type") == "comment")
-        key = {
-            "task_id": observation.get("task_id", ""),
-            "step": state.get("current_step", 0),
-            "inspected_diffs": sorted(state.get("inspected_diffs", [])),
-            "inspected_files": sorted(state.get("inspected_files", [])),
-            "comment_count": comment_count,
-            "latest_kind": latest_event.get("kind", "summary"),
-            "context": self.adapter.infer_context(observation),
-        }
-        return json.dumps(key, sort_keys=True)
+        
+        # Use tuple for faster hashing (vs JSON dumps)
+        key_tuple = (
+            observation.get("task_id", ""),
+            state.get("current_step", 0),
+            tuple(sorted(state.get("inspected_diffs", []))),
+            tuple(sorted(state.get("inspected_files", []))),
+            comment_count,
+            latest_event.get("kind", "summary"),
+            self.adapter.infer_context(observation),
+        )
+        
+        # Convert to string for Q-table dict key
+        return str(key_tuple)
 
     def _ensure_state_actions(self, state_key: str, action_ids: List[str]) -> None:
         if state_key not in self.q_table:
@@ -152,7 +160,27 @@ def train_agent(
     epsilon_min: float = 0.02,
     epsilon_decay: float = 0.995,
     seed: int = 7,
+    early_stop_patience: int = 100,
+    early_stop_threshold: float = 0.01,
+    log_interval: int = 100,
 ) -> Tuple[QLearningReviewAgent, List[Dict[str, object]]]:
+    """
+    Train Q-learning agent with metrics tracking and early stopping.
+    
+    Args:
+        episodes: Number of training episodes
+        alpha, gamma, epsilon, epsilon_min, epsilon_decay: Q-learning hyperparameters
+        seed: Random seed for reproducibility
+        early_stop_patience: Number of episodes to wait for improvement
+        early_stop_threshold: Minimum improvement threshold to reset patience
+        log_interval: Log metrics every N episodes
+    
+    Returns:
+        Trained agent and training history with metrics
+    """
+    import logging
+    logger = logging.getLogger(__name__)
+    
     random.seed(seed)
     env = CodeReviewEnv()
     agent = QLearningReviewAgent(
@@ -164,19 +192,64 @@ def train_agent(
     )
     task_ids = get_available_tasks()
     history: List[Dict[str, object]] = []
+    
+    # Early stopping tracking
+    best_avg_score = 0.0
+    patience_counter = 0
+    
+    # Metrics tracking
+    window_size = 100
+    recent_scores = []
 
     for episode in range(1, episodes + 1):
         task_id = random.choice(task_ids)
         score, report = run_episode(env, agent, task_id, training=True)
+        
+        # Track metrics
+        recent_scores.append(score)
+        if len(recent_scores) > window_size:
+            recent_scores.pop(0)
+        
         history.append(
             {
                 "episode": episode,
                 "task_id": task_id,
                 "score": score,
                 "status": report["grade_status"],
+                "epsilon": round(agent.epsilon, 4),
+                "q_table_size": len(agent.q_table),
             }
         )
         agent.decay_epsilon()
+        
+        # Log metrics at intervals
+        if episode % log_interval == 0:
+            avg_score = sum(recent_scores) / len(recent_scores)
+            logger.info(
+                f"Episode {episode}/{episodes} | "
+                f"Avg Score: {avg_score:.3f} | "
+                f"Epsilon: {agent.epsilon:.3f} | "
+                f"Q-table: {len(agent.q_table)} states"
+            )
+        
+        # Early stopping check
+        if len(recent_scores) >= window_size:
+            current_avg = sum(recent_scores) / len(recent_scores)
+            
+            if current_avg > best_avg_score + early_stop_threshold:
+                best_avg_score = current_avg
+                patience_counter = 0
+                logger.info(f"New best avg score: {best_avg_score:.4f}")
+            else:
+                patience_counter += 1
+            
+            if patience_counter >= early_stop_patience:
+                logger.info(
+                    f"Early stopping triggered at episode {episode}. "
+                    f"No improvement for {patience_counter} episodes."
+                )
+                history[-1]["stopped_early"] = True
+                break
 
     return agent, history
 

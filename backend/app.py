@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import logging
+import os
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -16,12 +18,27 @@ from env.environment import CodeReviewEnv
 from tasks.task_registry import get_available_tasks, get_task_catalog, load_task
 from grader.task_graders import get_grader
 
+# Setup logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s | %(name)-20s | %(levelname)-8s | %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
+logger = logging.getLogger(__name__)
+
+# Security: Configurable CORS origins (no wildcard)
+ALLOWED_ORIGINS = os.getenv(
+    "ALLOWED_ORIGINS", 
+    "http://localhost:3000,http://localhost:5173,http://localhost:8000"
+).split(",")
+
 app = FastAPI(title="Code Review Assistant API")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://localhost:5173", "*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=ALLOWED_ORIGINS,
+    allow_methods=["GET", "POST"],
+    allow_headers=["Content-Type"],
+    allow_credentials=True,
 )
 
 # Built frontend directory (populated by Docker build)
@@ -32,6 +49,9 @@ _env = CodeReviewEnv()
 _session: dict = {}
 _baseline_agent = BaselineAgent()
 
+# Cache for task catalog (performance optimization)
+_task_catalog_cache: dict | None = None
+
 
 class ActionRequest(BaseModel):
     action_type: str
@@ -41,40 +61,54 @@ class ActionRequest(BaseModel):
 
 @app.get("/api/tasks")
 def get_tasks():
-    meta = {"easy": "🟢", "medium": "🟡", "hard": "🔴"}
-    tasks = []
-    for item in get_task_catalog():
-        tasks.append(
-            {
-                "id": item["id"],
-                "label": item["label"],
-                "difficulty": item["difficulty"],
-                "icon": meta[item["difficulty"]],
-                "desc": item["description"],
-                "issue_title": item["issue_title"],
-                "pass_threshold": item["pass_threshold"],
-            }
-        )
-    return {"tasks": tasks}
+    """Get all available tasks with metadata (cached)."""
+    global _task_catalog_cache
+    
+    if _task_catalog_cache is None:
+        meta = {"easy": "🟢", "medium": "🟡", "hard": "🔴"}
+        tasks = []
+        for item in get_task_catalog():
+            tasks.append(
+                {
+                    "id": item["id"],
+                    "label": item["label"],
+                    "difficulty": item["difficulty"],
+                    "icon": meta[item["difficulty"]],
+                    "desc": item["description"],
+                    "issue_title": item["issue_title"],
+                    "pass_threshold": item["pass_threshold"],
+                }
+            )
+        _task_catalog_cache = {"tasks": tasks}
+    
+    return _task_catalog_cache
 
 
 @app.post("/api/reset/{task_name}")
 def reset(task_name: str):
+    """Reset environment with a specific task."""
     if task_name not in get_available_tasks():
+        logger.warning(f"Unknown task requested: {task_name}")
         return JSONResponse(status_code=400, content={"error": "Unknown task"})
-    task = load_task(task_name)
-    grader = get_grader(task_name)
-    obs = _env.reset(task)
-    _session.update({"task_name": task_name, "task": task, "grader": grader, "obs": obs, "done": False})
-    return {
-        "observation": obs,
-        "state": _env.state(),
-        "task_id": task["id"],
-        "difficulty": task["difficulty"],
-        "description": task["description"],
-        "issue_title": task["issue_title"],
-        "issue_body": task["issue_body"],
-    }
+    
+    try:
+        task = load_task(task_name)
+        grader = get_grader(task_name)
+        obs = _env.reset(task)
+        _session.update({"task_name": task_name, "task": task, "grader": grader, "obs": obs, "done": False})
+        logger.info(f"Task {task_name} reset successfully")
+        return {
+            "observation": obs,
+            "state": _env.state(),
+            "task_id": task["id"],
+            "difficulty": task["difficulty"],
+            "description": task["description"],
+            "issue_title": task["issue_title"],
+            "issue_body": task["issue_body"],
+        }
+    except Exception as e:
+        logger.error(f"Error resetting task {task_name}: {e}", exc_info=True)
+        return JSONResponse(status_code=500, content={"error": str(e)})
 
 
 @app.post("/api/step")

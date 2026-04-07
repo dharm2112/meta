@@ -54,10 +54,24 @@ tasks:
     pass_threshold: 0.7
     max_steps: 6
 
+  - name: easy_csrf_001
+    module: tasks.loader
+    class: json
+    description: "Missing CSRF token validation"
+    pass_threshold: 0.7
+    max_steps: 6
+
   - name: medium_null_001
     module: tasks.loader
     class: json
     description: "Null handling remains broken in service layer"
+    pass_threshold: 0.6
+    max_steps: 7
+
+  - name: medium_race_001
+    module: tasks.loader
+    class: json
+    description: "Race condition in payment processing"
     pass_threshold: 0.6
     max_steps: 7
 

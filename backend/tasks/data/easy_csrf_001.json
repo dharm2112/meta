@@ -1,0 +1,42 @@
+{
+  "id": "easy_csrf_001",
+  "label": "Easy",
+  "difficulty": "easy",
+  "description": "Missing CSRF token validation on state-changing endpoint.",
+  "summary": "A PR adds a delete endpoint for user accounts but forgets to validate CSRF tokens, allowing attackers to trick users into deleting their accounts.",
+  "issue_title": "Add CSRF protection to delete endpoint",
+  "issue_body": "The new delete account endpoint is vulnerable to CSRF attacks because it doesn't validate CSRF tokens. An attacker could create a malicious page that makes authenticated users delete their accounts.",
+  "changed_files": [
+    "routes/account.py"
+  ],
+  "diffs": {
+    "routes/account.py": "@@\n+@router.post(\"/account/delete\")\n+def delete_account(user=Depends(get_current_user)):\n+    if not user:\n+        raise HTTPException(status_code=401)\n+    db.delete_user(user.id)\n+    return {\"success\": True}"
+  },
+  "files": {
+    "routes/account.py": "from fastapi import APIRouter, Depends, HTTPException\nfrom auth import get_current_user\nfrom database import db\n\nrouter = APIRouter()\n\n@router.post(\"/account/delete\")\ndef delete_account(user=Depends(get_current_user)):\n    if not user:\n        raise HTTPException(status_code=401)\n    db.delete_user(user.id)\n    return {\"success\": True}\n",
+    "middleware/csrf.py": "from fastapi import Request, HTTPException\n\ndef validate_csrf_token(request: Request) -> bool:\n    \"\"\"Validate CSRF token from request.\"\"\"\n    token = request.headers.get(\"X-CSRF-Token\")\n    session_token = request.session.get(\"csrf_token\")\n    return token and token == session_token\n"
+  },
+  "ground_truth": {
+    "correct_decision": "reject",
+    "relevant_files": [
+      "routes/account.py",
+      "middleware/csrf.py"
+    ],
+    "bug_type": "csrf",
+    "keywords": [
+      "csrf",
+      "cross-site request forgery",
+      "csrf token",
+      "token validation",
+      "state-changing"
+    ],
+    "root_cause_keywords": [
+      "missing csrf validation",
+      "no token check",
+      "csrf protection absent"
+    ],
+    "uncertain": false
+  },
+  "pass_threshold": 0.7,
+  "max_steps": 6
+}

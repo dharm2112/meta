@@ -34,8 +34,15 @@ class CodeReviewEnv:
         )
 
     def reset(self, task: Optional[Any] = None) -> Dict[str, Any]:
+        """Reset environment with a new task. Optimized to avoid unnecessary deep copying."""
         if task is not None:
-            self.task = copy.deepcopy(load_task(task) if isinstance(task, str) else task)
+            # Only deep copy if task is a dict (mutable), otherwise load fresh
+            if isinstance(task, str):
+                self.task = load_task(task)  # Already returns fresh dict
+            else:
+                # Shallow copy is sufficient - task data is read-only during episode
+                self.task = task.copy() if isinstance(task, dict) else task
+        
         if not self.task:
             raise ValueError("reset() requires a task id or task payload")
 
@@ -54,12 +61,19 @@ class CodeReviewEnv:
         )
         return self._build_observation().model_dump()
 
-    def step(self, action: Dict[str, Any]) -> Tuple[Dict[str, Any], float, bool, Dict[str, Any]]:
+    def step(self, action: Dict[str, Any] | ActionModel) -> Tuple[Dict[str, Any], float, bool, Dict[str, Any]]:
+        """Execute an action. Accepts both dict and ActionModel objects."""
         if self.done:
             raise RuntimeError("Episode has ended. Call reset() to start a new episode.")
 
         previous_score, _ = RewardEngine.score_actions(self.task, self.actions_taken)
-        action_model = ActionModel(**action)
+        
+        # Handle both dict and ActionModel input
+        if isinstance(action, ActionModel):
+            action_model = action
+        else:
+            action_model = ActionModel(**action)
+        
         self.latest_event = self._handle_action(action_model)
 
         action_record = {

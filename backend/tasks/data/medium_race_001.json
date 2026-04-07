@@ -1,0 +1,42 @@
+{
+  "id": "medium_race_001",
+  "label": "Medium",
+  "difficulty": "medium",
+  "description": "Race condition in payment processing allows double-charging users.",
+  "summary": "A PR fixes a null check in the payment controller but doesn't address the race condition in the background job processor that can charge users twice if requests arrive simultaneously.",
+  "issue_title": "Fix payment double-charging issue",
+  "issue_body": "Users are being charged twice when they submit payment requests in rapid succession. The controller now validates the payment object exists, but the async payment processor still lacks proper locking.",
+  "changed_files": [
+    "controllers/payment_controller.py"
+  ],
+  "diffs": {
+    "controllers/payment_controller.py": "@@\n-def process_payment(payment_id: str):\n-    payment = db.get_payment(payment_id)\n-    charge_user(payment)\n+def process_payment(payment_id: str):\n+    payment = db.get_payment(payment_id)\n+    if not payment:\n+        raise ValueError(\"Payment not found\")\n+    charge_user(payment)"
+  },
+  "files": {
+    "controllers/payment_controller.py": "def process_payment(payment_id: str):\n    payment = db.get_payment(payment_id)\n    if not payment:\n        raise ValueError(\"Payment not found\")\n    charge_user(payment)\n",
+    "jobs/payment_processor.py": "import asyncio\nfrom database import db\n\nasync def process_pending_payments():\n    \"\"\"Background job that processes pending payments.\"\"\"\n    pending = db.get_pending_payments()\n    for payment_id in pending:\n        # BUG: No locking mechanism - multiple workers can process same payment\n        payment = db.get_payment(payment_id)\n        if payment.status == \"pending\":\n            charge_result = await charge_user(payment)\n            if charge_result.success:\n                db.mark_payment_complete(payment_id)\n"
+  },
+  "ground_truth": {
+    "correct_decision": "reject",
+    "relevant_files": [
+      "controllers/payment_controller.py",
+      "jobs/payment_processor.py"
+    ],
+    "bug_type": "race_condition",
+    "keywords": [
+      "race condition",
+      "double charge",
+      "concurrent",
+      "locking",
+      "synchronization"
+    ],
+    "root_cause_keywords": [
+      "no locking mechanism",
+      "multiple workers process same payment",
+      "background job lacks synchronization"
+    ],
+    "uncertain": false
+  },
+  "pass_threshold": 0.6,
+  "max_steps": 7
+}

@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Any, Dict, Iterable, List, Tuple
 
+from env.reward_config import default_config, RewardConfig
+
 
 def clamp_score(score: float) -> float:
     return min(max(score, 0.0), 1.0)
@@ -25,19 +27,69 @@ def _contains_any(text: str, phrases: Iterable[str]) -> Tuple[bool, List[str]]:
 
 class RewardEngine:
     """Scores evidence gathering, issue identification, and final decisions."""
-
-    RELEVANT_DIFF_WEIGHT = 0.15
-    RELEVANT_FILE_WEIGHT = 0.10
-    BUG_TYPE_WEIGHT = 0.15
-    ROOT_CAUSE_WEIGHT = 0.10
-    FINAL_DECISION_WEIGHT = 0.50
-    IRRELEVANT_INSPECTION_PENALTY = 0.03
-    REPEATED_ACTION_PENALTY = 0.02
-    HALLUCINATED_COMMENT_PENALTY = 0.05
+    
+    # Default weights (now configurable via RewardConfig)
+    RELEVANT_DIFF_WEIGHT = default_config.relevant_diff_weight
+    RELEVANT_FILE_WEIGHT = default_config.relevant_file_weight
+    BUG_TYPE_WEIGHT = default_config.bug_type_weight
+    ROOT_CAUSE_WEIGHT = default_config.root_cause_weight
+    FINAL_DECISION_WEIGHT = default_config.final_decision_weight
+    IRRELEVANT_INSPECTION_PENALTY = default_config.irrelevant_inspection_penalty
+    REPEATED_ACTION_PENALTY = default_config.repeated_action_penalty
+    HALLUCINATED_COMMENT_PENALTY = default_config.hallucinated_comment_penalty
 
     @classmethod
-    def score_actions(cls, task: Dict[str, Any], actions_taken: List[Dict[str, Any]]) -> Tuple[float, Dict[str, Any]]:
+    def score_actions(
+        cls, 
+        task: Dict[str, Any], 
+        actions_taken: List[Dict[str, Any]],
+        config: RewardConfig | None = None
+    ) -> Tuple[float, Dict[str, Any]]:
+        """
+        Score actions with validation of task structure.
+        
+        Args:
+            task: Task specification with ground_truth
+            actions_taken: List of actions executed
+            config: Optional custom reward configuration (uses default if None)
+        
+        Returns:
+            Tuple of (score, breakdown_dict)
+        """
+        # Use custom config if provided
+        if config is not None:
+            diff_weight = config.relevant_diff_weight
+            file_weight = config.relevant_file_weight
+            bug_weight = config.bug_type_weight
+            root_weight = config.root_cause_weight
+            decision_weight = config.final_decision_weight
+            irrel_penalty = config.irrelevant_inspection_penalty
+            repeat_penalty = config.repeated_action_penalty
+            halluc_penalty = config.hallucinated_comment_penalty
+        else:
+            diff_weight = cls.RELEVANT_DIFF_WEIGHT
+            file_weight = cls.RELEVANT_FILE_WEIGHT
+            bug_weight = cls.BUG_TYPE_WEIGHT
+            root_weight = cls.ROOT_CAUSE_WEIGHT
+            decision_weight = cls.FINAL_DECISION_WEIGHT
+            irrel_penalty = cls.IRRELEVANT_INSPECTION_PENALTY
+            repeat_penalty = cls.REPEATED_ACTION_PENALTY
+            halluc_penalty = cls.HALLUCINATED_COMMENT_PENALTY
+        
+        # Validate required task fields
+        required_fields = ["ground_truth", "changed_files"]
+        for field in required_fields:
+            if field not in task:
+                raise ValueError(f"Task missing required field: '{field}'")
+        
         ground_truth = task["ground_truth"]
+        
+        # Validate ground_truth structure
+        required_gt_fields = ["relevant_files", "bug_type", "keywords", "root_cause_keywords", "correct_decision"]
+        for field in required_gt_fields:
+            if field not in ground_truth:
+                raise ValueError(f"Task ground_truth missing required field: '{field}'")
+        
         relevant_files = set(ground_truth["relevant_files"])
         changed_files = set(task["changed_files"])
         relevant_changed_files = relevant_files & changed_files
@@ -50,9 +102,9 @@ class RewardEngine:
 
         evidence_score = 0.0
         if inspected_diffs & relevant_changed_files:
-            evidence_score += cls.RELEVANT_DIFF_WEIGHT
+            evidence_score += diff_weight
         if inspected_files & relevant_files:
-            evidence_score += cls.RELEVANT_FILE_WEIGHT
+            evidence_score += file_weight
 
         comment_text = "\n".join(comments)
         bug_type_hit, bug_hits = _contains_any(comment_text, [ground_truth["bug_type"], *ground_truth["keywords"]])
@@ -60,11 +112,11 @@ class RewardEngine:
 
         issue_score = 0.0
         if bug_type_hit:
-            issue_score += cls.BUG_TYPE_WEIGHT
+            issue_score += bug_weight
         if root_cause_hit:
-            issue_score += cls.ROOT_CAUSE_WEIGHT
+            issue_score += root_weight
 
-        decision_score = cls.FINAL_DECISION_WEIGHT if final_decision == ground_truth["correct_decision"] else 0.0
+        decision_score = decision_weight if final_decision == ground_truth["correct_decision"] else 0.0
 
         irrelevant_inspections = 0
         seen_actions = set()
@@ -88,9 +140,9 @@ class RewardEngine:
                     hallucinated_comments += 1
 
         penalties = (
-            irrelevant_inspections * cls.IRRELEVANT_INSPECTION_PENALTY
-            + repeated_actions * cls.REPEATED_ACTION_PENALTY
-            + hallucinated_comments * cls.HALLUCINATED_COMMENT_PENALTY
+            irrelevant_inspections * irrel_penalty
+            + repeated_actions * repeat_penalty
+            + hallucinated_comments * halluc_penalty
         )
 
         raw_score = evidence_score + issue_score + decision_score - penalties
