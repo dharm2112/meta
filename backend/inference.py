@@ -25,6 +25,7 @@ try:
     from backend.grader.task_graders import get_grader
     from backend.rl.q_learning import QLearningReviewAgent
     from backend.tasks.task_registry import get_available_tasks
+    from backend.openai_agent import LiteLLMReviewAgent
 except ImportError:
     # When run directly from backend directory
     from baseline import BaselineAgent
@@ -32,14 +33,12 @@ except ImportError:
     from grader.task_graders import get_grader
     from rl.q_learning import QLearningReviewAgent
     from tasks.task_registry import get_available_tasks
+    from openai_agent import LiteLLMReviewAgent
 
-# ── Required environment variables ───────────────────────────────────
-API_BASE_URL = os.getenv("API_BASE_URL", "https://api.groq.com/openai/v1")
-MODEL_NAME = os.getenv("MODEL_NAME", "llama-3.3-70b-versatile")
-HF_TOKEN = os.getenv("HF_TOKEN")
-
-# Optional — if you use from_docker_image():
-LOCAL_IMAGE_NAME = os.getenv("LOCAL_IMAGE_NAME")
+# ── Required environment variables (LiteLLM proxy) ───────────────────
+API_KEY = os.environ.get("API_KEY")
+API_BASE_URL = os.environ.get("API_BASE_URL")
+MODEL_NAME = os.environ.get("MODEL_NAME", "gpt-4o-mini")
 
 BENCHMARK = "code-review-env"
 
@@ -69,8 +68,12 @@ def log_end(success: bool, steps: int, score: float, rewards: List[float]) -> No
 # ── Main inference loop ──────────────────────────────────────────────
 def run_inference(agent=None) -> List[Dict[str, Any]]:
     """Run one episode per task; return list of result dicts."""
+    # Default to LLM agent if API_KEY is available, otherwise use heuristic
     if agent is None:
-        agent = BaselineAgent()
+        if API_KEY and API_BASE_URL:
+            agent = LiteLLMReviewAgent()
+        else:
+            agent = BaselineAgent()
 
     env = CodeReviewEnv()
     results = []
@@ -128,18 +131,15 @@ def run_inference(agent=None) -> List[Dict[str, Any]]:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run evaluation over all PR review tasks")
-    parser.add_argument("--agent", choices=["heuristic", "rl", "groq"], default="heuristic")
+    parser.add_argument("--agent", choices=["heuristic", "rl", "llm"], default="llm")
     parser.add_argument("--checkpoint", default="checkpoints/q_learning_policy.json")
-    parser.add_argument("--model", default=None, help="Model name override (only with --agent groq)")
+    parser.add_argument("--model", default=None, help="Model name override")
     args = parser.parse_args()
 
-    if args.agent == "groq":
-        api_key = HF_TOKEN or os.getenv("GROQ_API_KEY")
-        if not api_key:
-            raise SystemExit("ERROR: Set HF_TOKEN or GROQ_API_KEY environment variable.")
-        from openai_agent import GroqReviewAgent
-        model = args.model or MODEL_NAME
-        agent = GroqReviewAgent(api_key=api_key, model=model, base_url=API_BASE_URL)
+    if args.agent == "llm":
+        if not API_KEY or not API_BASE_URL:
+            raise SystemExit("ERROR: Set API_KEY and API_BASE_URL environment variables.")
+        agent = LiteLLMReviewAgent(model=args.model)
     elif args.agent == "rl":
         agent = QLearningReviewAgent.load(args.checkpoint)
         agent.epsilon = 0.0

@@ -22,26 +22,26 @@ if _backend_dir not in sys.path:
 # Import the actual inference logic
 from backend.baseline import BaselineAgent
 from backend.inference import run_inference
+from backend.openai_agent import LiteLLMReviewAgent
 
 if __name__ == "__main__":
     import argparse
     import json
 
     parser = argparse.ArgumentParser(description="OpenEnv inference entry point")
-    parser.add_argument("--agent", choices=["heuristic", "rl", "groq"], default="heuristic")
+    parser.add_argument("--agent", choices=["heuristic", "rl", "llm"], default="llm")
     parser.add_argument("--checkpoint", default="backend/checkpoints/q_learning_policy.json")
-    parser.add_argument("--model", default=None, help="Model name override (only with --agent groq)")
+    parser.add_argument("--model", default=None, help="Model name override")
     args = parser.parse_args()
 
     # Configure agent based on selection
-    if args.agent == "groq":
-        api_key = os.getenv("HF_TOKEN") or os.getenv("GROQ_API_KEY")
-        if not api_key:
-            raise SystemExit("ERROR: Set HF_TOKEN or GROQ_API_KEY environment variable.")
-        from backend.openai_agent import GroqReviewAgent
-        model = args.model or os.getenv("MODEL_NAME", "llama-3.3-70b-versatile")
-        base_url = os.getenv("API_BASE_URL", "https://api.groq.com/openai/v1")
-        agent = GroqReviewAgent(api_key=api_key, model=model, base_url=base_url)
+    if args.agent == "llm":
+        # Use LiteLLM proxy via API_KEY and API_BASE_URL
+        api_key = os.environ.get("API_KEY")
+        api_base_url = os.environ.get("API_BASE_URL")
+        if not api_key or not api_base_url:
+            raise SystemExit("ERROR: Set API_KEY and API_BASE_URL environment variables.")
+        agent = LiteLLMReviewAgent(model=args.model)
     elif args.agent == "rl":
         from backend.rl.q_learning import QLearningReviewAgent
         agent = QLearningReviewAgent.load(args.checkpoint)

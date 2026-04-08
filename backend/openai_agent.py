@@ -1,4 +1,4 @@
-"""Groq API-based review agent for the offline PR review environment."""
+"""LiteLLM proxy-based review agent for the offline PR review environment."""
 
 from __future__ import annotations
 
@@ -36,24 +36,24 @@ IMPORTANT: Respond with ONLY the JSON action object, no markdown, no explanation
 """
 
 
-class GroqReviewAgent:
-    """Uses an OpenAI-compatible API to decide actions."""
-
-    DEFAULT_BASE_URL = "https://api.groq.com/openai/v1"
+class LiteLLMReviewAgent:
+    """Uses the LiteLLM proxy (via OpenAI-compatible API) to decide actions."""
 
     def __init__(
         self,
         api_key: str | None = None,
-        model: str = "llama-3.3-70b-versatile",
+        model: str | None = None,
         base_url: str | None = None,
     ) -> None:
         if OpenAI is None:
             raise ImportError("Install the openai package: pip install openai>=1.0")
+        
+        # MUST use API_KEY and API_BASE_URL from environment (LiteLLM proxy)
         self.client = OpenAI(
-            api_key=api_key or os.getenv("HF_TOKEN") or os.getenv("GROQ_API_KEY"),
-            base_url=base_url or os.getenv("API_BASE_URL") or self.DEFAULT_BASE_URL,
+            api_key=api_key or os.environ.get("API_KEY"),
+            base_url=base_url or os.environ.get("API_BASE_URL"),
         )
-        self.model = model
+        self.model = model or os.environ.get("MODEL_NAME", "gpt-4o-mini")
 
     def act(self, observation: Dict[str, Any], state: Dict[str, Any]) -> Dict[str, Any]:
         user_content = json.dumps(
@@ -77,6 +77,10 @@ class GroqReviewAgent:
         if "action_type" not in action:
             raise ValueError(f"Model returned invalid action: {raw}")
         return action
+
+
+# Alias for backward compatibility
+GroqReviewAgent = LiteLLMReviewAgent
 
 
 def _slim_obs(obs: Dict[str, Any]) -> Dict[str, Any]:

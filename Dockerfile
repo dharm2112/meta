@@ -1,5 +1,5 @@
 # OpenEnv/Scaler evaluation Dockerfile
-# Serves the environment via HTTP endpoints (reset, step, state)
+# Runs inference with LiteLLM proxy for Phase 2 validation
 
 FROM python:3.11-slim
 
@@ -9,14 +9,12 @@ WORKDIR /app
 COPY backend/requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy backend source code
-COPY backend/ ./
+# Copy all source code
+COPY backend/ ./backend/
+COPY inference.py ./
 
 # Set Python path
-ENV PYTHONPATH=/app
+ENV PYTHONPATH=/app:/app/backend
 
-# Expose port for OpenEnv HTTP requests
-EXPOSE 7860
-
-# Run the FastAPI server (OpenEnv calls /reset, /step, /state endpoints)
-CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "7860"]
+# Run inference with LLM agent (uses API_KEY and API_BASE_URL from environment)
+CMD ["python", "inference.py", "--agent", "llm"]
