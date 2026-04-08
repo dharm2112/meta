@@ -5,9 +5,14 @@ from __future__ import annotations
 import argparse
 from typing import Any, Dict, List
 
-from env.environment import CodeReviewEnv
-from grader.task_graders import get_grader
-from tasks.task_registry import get_available_tasks, load_task
+try:
+    from backend.env.environment import CodeReviewEnv
+    from backend.grader.task_graders import get_grader
+    from backend.tasks.task_registry import get_available_tasks, load_task
+except ImportError:
+    from env.environment import CodeReviewEnv
+    from grader.task_graders import get_grader
+    from tasks.task_registry import get_available_tasks, load_task
 
 
 class BaselineAgent:

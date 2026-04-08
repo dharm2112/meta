@@ -3,11 +3,18 @@ from __future__ import annotations
 import copy
 from typing import Any, Dict, Optional, Tuple
 
-from env.action import ActionModel, VALID_ACTIONS
-from env.observation import ObservationEventModel, ObservationModel
-from env.reward import RewardEngine
-from env.state import StateModel
-from tasks.task_registry import load_task
+try:
+    from backend.env.action import ActionModel, VALID_ACTIONS
+    from backend.env.observation import ObservationEventModel, ObservationModel
+    from backend.env.reward import RewardEngine
+    from backend.env.state import StateModel
+    from backend.tasks.task_registry import load_task
+except ImportError:
+    from env.action import ActionModel, VALID_ACTIONS
+    from env.observation import ObservationEventModel, ObservationModel
+    from env.reward import RewardEngine
+    from env.state import StateModel
+    from tasks.task_registry import load_task
 
 
 TERMINAL_ACTIONS = frozenset({"approve", "reject", "escalate"})
@@ -43,8 +50,16 @@ class CodeReviewEnv:
                 # Shallow copy is sufficient - task data is read-only during episode
                 self.task = task.copy() if isinstance(task, dict) else task
         
+        # If no task provided, use first available task (OpenEnv compatibility)
         if not self.task:
-            raise ValueError("reset() requires a task id or task payload")
+            try:
+                from backend.tasks.task_registry import get_available_tasks
+            except ImportError:
+                from tasks.task_registry import get_available_tasks
+            available = get_available_tasks()
+            if not available:
+                raise ValueError("No tasks available")
+            self.task = load_task(available[0])
 
         self.done = False
         self.current_step = 0

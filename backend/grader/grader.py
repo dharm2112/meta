@@ -3,7 +3,10 @@
 from __future__ import annotations
 from typing import Any, Dict, List
 
-from env.reward import RewardEngine
+try:
+    from backend.env.reward import RewardEngine
+except ImportError:
+    from env.reward import RewardEngine
 
 
 class TaskGrader:

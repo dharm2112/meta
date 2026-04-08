@@ -1,0 +1,96 @@
+name: code-review-env
+version: "1.0.0"
+description: "Deterministic offline PR review benchmark for AI agents"
+author: "Code Review Assistant Team"
+
+environment:
+  class: CodeReviewEnv
+  module: backend.env.environment
+  endpoints:
+    - reset
+    - step
+    - state
+  deterministic: true
+  requires_gpu: false
+  requires_internet: false
+
+observation:
+  type: dict
+  fields:
+    task_id: str
+    difficulty: str
+    summary: str
+    issue_title: str
+    issue_body: str
+    changed_files: list[str]
+    available_files: list[str]
+    available_actions: list[str]
+    latest_event: dict
+
+action:
+  type: dict
+  fields:
+    action_type:
+      type: str
+      allowed:
+        - inspect_diff
+        - inspect_file
+        - comment
+        - approve
+        - reject
+        - escalate
+    path:
+      type: str
+      required: false
+    text:
+      type: str
+      required: false
+
+tasks:
+  - name: easy_auth_001
+    module: backend.tasks.loader
+    class: json
+    description: "Missing admin check on export endpoint"
+    pass_threshold: 0.7
+    max_steps: 6
+
+  - name: easy_csrf_001
+    module: backend.tasks.loader
+    class: json
+    description: "Missing CSRF token validation"
+    pass_threshold: 0.7
+    max_steps: 6
+
+  - name: medium_null_001
+    module: backend.tasks.loader
+    class: json
+    description: "Null handling remains broken in service layer"
+    pass_threshold: 0.6
+    max_steps: 7
+
+  - name: medium_race_001
+    module: backend.tasks.loader
+    class: json
+    description: "Race condition in payment processing"
+    pass_threshold: 0.6
+    max_steps: 7
+
+  - name: hard_security_001
+    module: backend.tasks.loader
+    class: json
+    description: "Auth fallback policy requires escalation"
+    pass_threshold: 0.5
+    max_steps: 7
+
+grader:
+  module: backend.grader.task_graders
+  score_range: [0.0, 1.0]
+  normalize: true
+
+baseline:
+  agent: BaselineAgent
+  module: backend.baseline
+  scores:
+    easy_auth_001: 1.0
+    medium_null_001: 1.0
+    hard_security_001: 1.0

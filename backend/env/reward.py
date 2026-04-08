@@ -4,7 +4,10 @@ from __future__ import annotations
 
 from typing import Any, Dict, Iterable, List, Tuple
 
-from env.reward_config import default_config, RewardConfig
+try:
+    from backend.env.reward_config import default_config, RewardConfig
+except ImportError:
+    from env.reward_config import default_config, RewardConfig
 
 
 def clamp_score(score: float) -> float:

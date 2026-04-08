@@ -18,11 +18,20 @@ _backend_dir = os.path.dirname(os.path.abspath(__file__))
 if _backend_dir not in sys.path:
     sys.path.insert(0, _backend_dir)
 
-from baseline import BaselineAgent
-from env.environment import CodeReviewEnv
-from grader.task_graders import get_grader
-from rl.q_learning import QLearningReviewAgent
-from tasks.task_registry import get_available_tasks
+try:
+    # When imported from root inference.py
+    from backend.baseline import BaselineAgent
+    from backend.env.environment import CodeReviewEnv
+    from backend.grader.task_graders import get_grader
+    from backend.rl.q_learning import QLearningReviewAgent
+    from backend.tasks.task_registry import get_available_tasks
+except ImportError:
+    # When run directly from backend directory
+    from baseline import BaselineAgent
+    from env.environment import CodeReviewEnv
+    from grader.task_graders import get_grader
+    from rl.q_learning import QLearningReviewAgent
+    from tasks.task_registry import get_available_tasks
 
 # ── Required environment variables ───────────────────────────────────
 API_BASE_URL = os.getenv("API_BASE_URL", "https://api.groq.com/openai/v1")

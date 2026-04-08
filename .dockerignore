@@ -5,6 +5,6 @@ __pycache__
 node_modules
 frontend/node_modules
 frontend/dist
-backend/checkpoints
+frontend/
 *.egg-info
 .env

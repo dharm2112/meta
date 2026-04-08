@@ -1,37 +1,33 @@
-# ── Stage 1: build React frontend ────────────────────────────────────
-FROM node:20-slim AS frontend-build
-WORKDIR /build
-COPY frontend/package.json frontend/package-lock.json* ./
-RUN npm ci --legacy-peer-deps
-COPY frontend/ ./
-RUN npm run build
-# produces /build/dist/
+# OpenEnv/Scaler evaluation Dockerfile
+# Runs inference.py for automated benchmark evaluation
 
-# ── Stage 2: production image ────────────────────────────────────────
 FROM python:3.11-slim
 
+# Create non-root user for security
 RUN useradd -m -u 1000 appuser
-WORKDIR /app/backend
-ENV PYTHONPATH=/app/backend
 
-# Python deps (cached layer)
-COPY backend/requirements.txt ./
+WORKDIR /app
+
+# Install Python dependencies (minimal for inference)
+COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Backend source
-COPY backend/ ./
+# Copy backend source code
+COPY backend/ ./backend/
 
-# Add backend dir to Python path via .pth file (reliable across all contexts)
-RUN echo "/app/backend" > "$(python -c 'import site; print(site.getsitepackages()[0])')/backend.pth"
+# Copy root-level files for OpenEnv
+COPY inference.py ./
+COPY openenv.yaml ./
 
-# Built frontend → backend/static (FastAPI serves it)
-COPY --from=frontend-build /build/dist ./static
+# Set Python path to find backend modules
+ENV PYTHONPATH=/app:/app/backend
 
-# Pre-train RL checkpoint so the demo works out of the box
-RUN python train_rl.py --episodes 1000
+# Add .pth file for reliable module resolution
+RUN echo "/app" > "$(python -c 'import site; print(site.getsitepackages()[0])')/app.pth" && \
+    echo "/app/backend" >> "$(python -c 'import site; print(site.getsitepackages()[0])')/app.pth"
 
-EXPOSE 7860
-ENV PORT=7860
-
+# Switch to non-root user
 USER appuser
-CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "7860"]
+
+# Default command: run inference with heuristic agent
+CMD ["python", "inference.py", "--agent", "heuristic"]

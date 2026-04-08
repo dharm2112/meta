@@ -2,8 +2,12 @@
 
 from __future__ import annotations
 
-from grader.grader import TaskGrader
-from tasks.task_registry import load_task
+try:
+    from backend.grader.grader import TaskGrader
+    from backend.tasks.task_registry import load_task
+except ImportError:
+    from grader.grader import TaskGrader
+    from tasks.task_registry import load_task
 
 
 def get_grader(task_id: str, is_custom: bool = False) -> TaskGrader:
@@ -19,7 +23,10 @@ def get_grader(task_id: str, is_custom: bool = False) -> TaskGrader:
     """
     if is_custom:
         # For custom uploads, get from dynamic store
-        from tasks.dynamic_store import get_dynamic_task
+        try:
+            from backend.tasks.dynamic_store import get_dynamic_task
+        except ImportError:
+            from tasks.dynamic_store import get_dynamic_task
         task = get_dynamic_task(task_id)
         if task:
             return TaskGrader(task, review_only=True)
