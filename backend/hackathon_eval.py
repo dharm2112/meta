@@ -76,8 +76,8 @@ def phase1_test2():
     
     # Test step with dict action
     action = {
-        'action': 'inspect_diff',
-        'target': list(env.task['diffs'].keys())[0]
+        'action_type': 'inspect_diff',
+        'path': list(env.task['diffs'].keys())[0]
     }
     
     next_obs, reward, done, info = env.step(action)
@@ -109,7 +109,7 @@ def phase1_test3():
     for diff in diffs[:min(3, len(diffs))]:
         if env.done:
             break
-        action = {'action': 'inspect_diff', 'target': diff}
+        action = {'action_type': 'inspect_diff', 'path': diff}
         obs, reward, done, info = env.step(action)
         total_reward += reward
         print(f"  Step {env.current_step}: inspect_diff -> reward={reward:.2f}")
@@ -117,7 +117,7 @@ def phase1_test3():
     # Make final decision
     if not env.done:
         decision = task['ground_truth']['correct_decision']
-        action = {'action': decision}
+        action = {'action_type': decision, 'text': f'Making {decision} decision'}
         obs, reward, done, info = env.step(action)
         total_reward += reward
         print(f"  Step {env.current_step}: {decision} -> reward={reward:.2f}")
@@ -152,8 +152,10 @@ def phase1_test4():
             'actions_taken': env.actions_taken.copy()
         }
         
-        action = agent.choose_action(obs, state)
-        print(f"  Step {i+1}: {action.action} -> target={getattr(action, 'target', 'N/A')}")
+        # Get action_id first, then convert to env action
+        action_id = agent.choose_action_id(obs, state, training=True)
+        action = agent.adapter.to_env_action(action_id, obs, state)
+        print(f"  Step {i+1}: {action.get('action_type')} -> path={action.get('path', 'N/A')}")
         
         next_obs, reward, done, info = env.step(action)
         
@@ -164,7 +166,7 @@ def phase1_test4():
             'actions_taken': env.actions_taken.copy()
         }
         
-        agent.update(obs, state, action, reward, next_obs, next_state, done)
+        agent.update(obs, state, action_id, reward, next_obs, next_state, done)
         
         total_reward += reward
         obs = next_obs
@@ -188,13 +190,13 @@ def phase1_test5():
     
     # Test 1: Dict action
     env.reset(task_id)
-    dict_action = {'action': 'inspect_diff', 'target': diff}
+    dict_action = {'action_type': 'inspect_diff', 'path': diff}
     obs1, reward1, done1, info1 = env.step(dict_action)
     print(f"  Dict action: reward={reward1:.2f}")
     
     # Test 2: ActionModel action
     env.reset(task_id)
-    model_action = ActionModel(action='inspect_diff', target=diff)
+    model_action = ActionModel(action_type='inspect_diff', path=diff)
     obs2, reward2, done2, info2 = env.step(model_action)
     print(f"  ActionModel: reward={reward2:.2f}")
     
@@ -234,15 +236,16 @@ def phase2_test2():
     from env.environment import CodeReviewEnv
     from tasks.loader import get_available_tasks, load_task
     
-    # Create custom reward config
-    custom_config = RewardConfig(
-        correct_decision=200.0,  # Much higher than default
-        wrong_decision=-100.0,
-        inspect_diff=2.0,
-        inspect_file=1.0
-    )
+    # Create custom config using from_dict
+    custom_config = RewardConfig.from_dict({
+        'final_decision_weight': 0.8,  # Much higher than default 0.5
+        'relevant_diff_weight': 0.1,   # Lower than default 0.15
+        'relevant_file_weight': 0.05,  # Lower than default 0.10
+        'bug_type_weight': 0.03,       # Lower than default 0.15
+        'root_cause_weight': 0.02,     # Lower than default 0.10
+    })
     
-    print(f"  Custom config: correct_decision={custom_config.correct_decision}")
+    print(f"  Custom config: final_decision_weight={custom_config.final_decision_weight}")
     
     # Test with custom config
     env = CodeReviewEnv()
@@ -253,13 +256,13 @@ def phase2_test2():
     
     # Make correct decision
     decision = task['ground_truth']['correct_decision']
-    action = {'action': decision}
+    action = {'action_type': decision, 'text': f'Making {decision} decision'}
     obs, reward, done, info = env.step(action)
     
     print(f"  Reward with default config: {reward}")
     
     # Verify RewardConfig can be instantiated with custom values
-    assert custom_config.correct_decision == 200.0
+    assert custom_config.final_decision_weight == 0.8
     
     return {'custom_config_ok': True, 'reward': reward}
 
