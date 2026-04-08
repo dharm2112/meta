@@ -24,18 +24,20 @@ dependencies = [
     "uvicorn>=0.23.0",
     "openai>=1.0",
     "python-multipart>=0.0.6",
+    "openenv-core>=0.2.0",
 ]
 
 [project.optional-dependencies]
 dev = ["pytest", "black", "ruff"]
 
 [project.scripts]
+server = "server.app:main"
 code-review-baseline = "backend.baseline:main"
 code-review-inference = "backend.inference:main"
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["backend*"]
+include = ["backend*", "server*"]
 
 [tool.setuptools.package-data]
 "backend.tasks" = ["data/*.json"]
