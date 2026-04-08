@@ -5,8 +5,9 @@ from __future__ import annotations
 import logging
 import os
 from pathlib import Path
+from typing import Optional
 
-from fastapi import FastAPI, UploadFile, File, Form
+from fastapi import FastAPI, UploadFile, File, Form, Body
 from fastapi.responses import JSONResponse, FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -59,6 +60,58 @@ class ActionRequest(BaseModel):
     action_type: str
     path: str | None = None
     text: str | None = None
+
+
+# ── OpenEnv Standard Endpoints (required for platform validation) ────
+@app.post("/reset")
+def openenv_reset(task_id: Optional[str] = Body(default=None, embed=True)):
+    """OpenEnv standard reset endpoint. POST /reset with optional {"task_id": "..."} body."""
+    # Use first task if no task_id provided
+    if not task_id:
+        task_id = get_available_tasks()[0]
+    
+    if task_id not in get_available_tasks():
+        return JSONResponse(status_code=400, content={"error": f"Unknown task: {task_id}"})
+    
+    try:
+        task = load_task(task_id)
+        obs = _env.reset(task)
+        grader = get_grader(task_id)
+        _session.update({"task_name": task_id, "task": task, "grader": grader, "obs": obs, "done": False})
+        logger.info(f"OpenEnv reset: {task_id}")
+        return {"observation": obs}
+    except Exception as e:
+        logger.error(f"OpenEnv reset error: {e}", exc_info=True)
+        return JSONResponse(status_code=500, content={"error": str(e)})
+
+
+@app.post("/step")
+def openenv_step(action: dict = Body(...)):
+    """OpenEnv standard step endpoint. POST /step with {"action": {...}} body."""
+    if not _session:
+        return JSONResponse(status_code=400, content={"error": "Call /reset first"})
+    
+    try:
+        obs, reward, done, info = _env.step(action)
+        _session["done"] = done
+        _session["obs"] = obs
+        return {
+            "observation": obs,
+            "reward": reward,
+            "done": done,
+            "info": info,
+        }
+    except Exception as e:
+        logger.error(f"OpenEnv step error: {e}", exc_info=True)
+        return JSONResponse(status_code=400, content={"error": str(e)})
+
+
+@app.get("/state")
+def openenv_state():
+    """OpenEnv standard state endpoint."""
+    if not _session:
+        return {"state": None}
+    return {"state": _env.state()}
 
 
 @app.get("/api/tasks")
