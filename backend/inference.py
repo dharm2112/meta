@@ -75,10 +75,11 @@ def run_inference(agent=None) -> List[Dict[str, Any]]:
         else:
             agent = BaselineAgent()
 
-    env = CodeReviewEnv()
     results = []
 
     for task_name in get_available_tasks():
+        # Create a fresh environment instance for each task to prevent state contamination
+        env = CodeReviewEnv()
         grader = get_grader(task_name)
 
         rewards: List[float] = []
