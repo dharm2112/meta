@@ -58,3 +58,6 @@ if __name__ == "__main__":
         print(f"  {r['task']:8s}  score={r['score']:.2f}  success={r['success']}")
     print("=" * 40)
     print(json.dumps(results, indent=2))
+    
+    # Ensure proper process termination
+    sys.exit(0)
