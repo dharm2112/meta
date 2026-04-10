@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 import os
+import time
+import random
 from typing import Any, Dict
 
 try:
@@ -54,29 +56,69 @@ class LiteLLMReviewAgent:
             base_url=base_url or os.environ.get("API_BASE_URL"),
         )
         self.model = model or os.environ.get("MODEL_NAME", "gpt-4o-mini")
+        
+        # Rate limiting parameters
+        self.last_call_time = 0
+        self.min_delay = 1.0  # Minimum 1 second between calls
+        self.max_retries = 3
 
     def act(self, observation: Dict[str, Any], state: Dict[str, Any]) -> Dict[str, Any]:
         user_content = json.dumps(
             {"observation": _slim_obs(observation), "state": _slim_state(state)},
             indent=2,
         )
-        response = self.client.chat.completions.create(
-            model=self.model,
-            messages=[
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": user_content},
-            ],
-            temperature=0.0,
-            max_tokens=512,
-        )
-        raw = response.choices[0].message.content or "{}"
-        raw = raw.strip()
-        if raw.startswith("```"):
-            raw = raw.split("\n", 1)[1].rsplit("```", 1)[0].strip()
-        action = json.loads(raw)
-        if "action_type" not in action:
-            raise ValueError(f"Model returned invalid action: {raw}")
-        return action
+        
+        # Rate limiting: ensure minimum delay between calls
+        current_time = time.time()
+        time_since_last_call = current_time - self.last_call_time
+        if time_since_last_call < self.min_delay:
+            time.sleep(self.min_delay - time_since_last_call)
+        
+        # Retry logic with exponential backoff
+        for attempt in range(self.max_retries + 1):
+            try:
+                response = self.client.chat.completions.create(
+                    model=self.model,
+                    messages=[
+                        {"role": "system", "content": SYSTEM_PROMPT},
+                        {"role": "user", "content": user_content},
+                    ],
+                    temperature=0.0,
+                    max_tokens=512,
+                )
+                
+                self.last_call_time = time.time()
+                raw = response.choices[0].message.content or "{}"
+                raw = raw.strip()
+                if raw.startswith("```"):
+                    raw = raw.split("\n", 1)[1].rsplit("```", 1)[0].strip()
+                action = json.loads(raw)
+                if "action_type" not in action:
+                    raise ValueError(f"Model returned invalid action: {raw}")
+                return action
+                
+            except Exception as e:
+                if attempt == self.max_retries:
+                    # Last attempt failed, re-raise the exception
+                    raise
+                
+                # Check if this is a rate limit error
+                error_str = str(e).lower()
+                is_rate_limit = any(keyword in error_str for keyword in [
+                    "rate limit", "429", "too many requests", "quota exceeded"
+                ])
+                
+                if is_rate_limit and attempt < self.max_retries:
+                    # Exponential backoff with jitter
+                    backoff_time = (2 ** attempt) + random.uniform(0.1, 0.5)
+                    print(f"[DEBUG] Rate limit hit, retrying in {backoff_time:.1f}s (attempt {attempt + 1}/{self.max_retries + 1})", flush=True)
+                    time.sleep(backoff_time)
+                else:
+                    # Non-rate-limit error, retry with shorter delay
+                    time.sleep(0.5 + attempt * 0.2)
+                    
+        # This should never be reached
+        raise RuntimeError("Unexpected error in retry logic")
 
 
 # Alias for backward compatibility
