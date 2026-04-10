@@ -77,7 +77,10 @@ def run_inference(agent=None) -> List[Dict[str, Any]]:
 
     results = []
 
-    for task_name in get_available_tasks():
+    # Get only first 2 tasks to avoid rate limiting
+    available_tasks = get_available_tasks()[:2]
+    
+    for task_name in available_tasks:
         # Create a fresh environment instance for each task to prevent state contamination
         env = CodeReviewEnv()
         grader = get_grader(task_name)
