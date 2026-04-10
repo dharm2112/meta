@@ -47,13 +47,29 @@ app.add_middleware(
 # Built frontend directory (populated by Docker build)
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 
-# Session state (single user demo)
+# Session state management for multi-user environment
+from contextlib import contextmanager
+from threading import Lock
+from typing import Dict, Any
+
+# Global environment and agents
 _env = CodeReviewEnv()
-_session: dict = {}
 _baseline_agent = BaselineAgent()
+
+# Thread-safe session storage
+_sessions: Dict[str, Dict[str, Any]] = {}
+_session_lock = Lock()
 
 # Cache for task catalog (performance optimization)
 _task_catalog_cache: dict | None = None
+
+@contextmanager
+def get_session(session_id: str = "default"):
+    """Thread-safe session context manager."""
+    with _session_lock:
+        if session_id not in _sessions:
+            _sessions[session_id] = {}
+        yield _sessions[session_id]
 
 
 class ActionRequest(BaseModel):
@@ -77,7 +93,17 @@ def openenv_reset(task_id: Optional[str] = Body(default=None, embed=True)):
         task = load_task(task_id)
         obs = _env.reset(task)
         grader = get_grader(task_id)
-        _session.update({"task_name": task_id, "task": task, "grader": grader, "obs": obs, "done": False})
+        
+        # Use thread-safe session management
+        with get_session("openenv") as session:
+            session.update({
+                "task_name": task_id, 
+                "task": task, 
+                "grader": grader, 
+                "obs": obs, 
+                "done": False
+            })
+        
         logger.info(f"OpenEnv reset: {task_id}")
         return {"observation": obs}
     except Exception as e:
@@ -88,30 +114,34 @@ def openenv_reset(task_id: Optional[str] = Body(default=None, embed=True)):
 @app.post("/step")
 def openenv_step(action: dict = Body(...)):
     """OpenEnv standard step endpoint. POST /step with {"action": {...}} body."""
-    if not _session:
-        return JSONResponse(status_code=400, content={"error": "Call /reset first"})
-    
-    try:
-        obs, reward, done, info = _env.step(action)
-        _session["done"] = done
-        _session["obs"] = obs
-        return {
-            "observation": obs,
-            "reward": reward,
-            "done": done,
-            "info": info,
-        }
-    except Exception as e:
-        logger.error(f"OpenEnv step error: {e}", exc_info=True)
-        return JSONResponse(status_code=400, content={"error": str(e)})
+    # Use thread-safe session management
+    with get_session("openenv") as session:
+        if not session:
+            return JSONResponse(status_code=400, content={"error": "Call /reset first"})
+        
+        try:
+            obs, reward, done, info = _env.step(action)
+            session["done"] = done
+            session["obs"] = obs
+            return {
+                "observation": obs,
+                "reward": reward,
+                "done": done,
+                "info": info,
+            }
+        except Exception as e:
+            logger.error(f"OpenEnv step error: {e}", exc_info=True)
+            return JSONResponse(status_code=400, content={"error": str(e)})
 
 
 @app.get("/state")
 def openenv_state():
     """OpenEnv standard state endpoint."""
-    if not _session:
-        return {"state": None}
-    return {"state": _env.state()}
+    # Use thread-safe session management
+    with get_session("openenv") as session:
+        if not session:
+            return {"state": None}
+        return {"state": _env.state()}
 
 
 @app.get("/api/tasks")
@@ -274,7 +304,17 @@ def reset(task_name: str):
     
     try:
         obs = _env.reset(task)
-        _session.update({"task_name": task_name, "task": task, "grader": grader, "obs": obs, "done": False})
+        
+        # Use thread-safe session management
+        with get_session("api") as session:
+            session.update({
+                "task_name": task_name, 
+                "task": task, 
+                "grader": grader, 
+                "obs": obs, 
+                "done": False
+            })
+        
         logger.info(f"Task {task_name} reset successfully")
         return {
             "observation": obs,
@@ -293,25 +333,27 @@ def reset(task_name: str):
 
 @app.post("/api/step")
 def step(req: ActionRequest):
-    if not _session:
-        return JSONResponse(status_code=400, content={"error": "Call /api/reset first"})
-    if _session.get("done"):
-        return JSONResponse(status_code=400, content={"error": "Episode done. Reset first."})
+    # Use thread-safe session management
+    with get_session("api") as session:
+        if not session:
+            return JSONResponse(status_code=400, content={"error": "Call /api/reset first"})
+        if session.get("done"):
+            return JSONResponse(status_code=400, content={"error": "Episode done. Reset first."})
 
-    action = {"action_type": req.action_type}
-    if req.path:
-        action["path"] = req.path
-    if req.text:
-        action["text"] = req.text
+        action = {"action_type": req.action_type}
+        if req.path:
+            action["path"] = req.path
+        if req.text:
+            action["text"] = req.text
 
-    try:
-        obs, reward, done, info = _env.step(action)
-    except Exception as e:
-        return JSONResponse(status_code=400, content={"error": str(e)})
+        try:
+            obs, reward, done, info = _env.step(action)
+        except Exception as e:
+            return JSONResponse(status_code=400, content={"error": str(e)})
 
-    _session["done"] = done
-    _session["obs"] = obs
-    state = _env.state()
+        session["done"] = done
+        session["obs"] = obs
+        state = _env.state()
 
     result = {
         "observation": obs,
@@ -323,36 +365,42 @@ def step(req: ActionRequest):
         "report": None,
     }
 
-    if done:
-        score = _session["grader"].grade_episode(state["actions_taken"])
-        report = _session["grader"].generate_grade_report()
-        result["score"] = score
-        result["report"] = report
+    # Use thread-safe session management for scoring
+    with get_session("api") as session:
+        if done and session:
+            score = session["grader"].grade_episode(state["actions_taken"])
+            report = session["grader"].generate_grade_report()
+            result["score"] = score
+            result["report"] = report
 
     return result
 
 
 @app.get("/api/state")
 def get_state():
-    if not _session:
-        return {"state": None}
-    return {"state": _env.state(), "done": _session.get("done", False)}
+    # Use thread-safe session management
+    with get_session("api") as session:
+        if not session:
+            return {"state": None}
+        return {"state": _env.state(), "done": session.get("done", False)}
 
 
 @app.post("/api/auto_action")
 def auto_action():
     """Let the heuristic baseline agent pick the next action and execute it."""
-    if not _session:
-        return JSONResponse(status_code=400, content={"error": "Call /api/reset first"})
-    if _session.get("done"):
-        return JSONResponse(status_code=400, content={"error": "Episode done. Reset first."})
-    obs = _session["obs"]
-    state = _env.state()
-    action = _baseline_agent.act(obs, state)
-    result = step(ActionRequest(**action))
-    # Include the chosen action so the frontend knows what was done
-    result["action"] = action
-    return result
+    # Use thread-safe session management
+    with get_session("api") as session:
+        if not session:
+            return JSONResponse(status_code=400, content={"error": "Call /api/reset first"})
+        if session.get("done"):
+            return JSONResponse(status_code=400, content={"error": "Episode done. Reset first."})
+        obs = session["obs"]
+        state = _env.state()
+        action = _baseline_agent.act(obs, state)
+        result = step(ActionRequest(**action))
+        # Include the chosen action so the frontend knows what was done
+        result["action"] = action
+        return result
 
 
 # ── Serve built frontend (production / Docker) ──────────────────────
