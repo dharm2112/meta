@@ -59,5 +59,14 @@ if __name__ == "__main__":
     print("=" * 40)
     print(json.dumps(results, indent=2))
     
+    # Flush all output streams to ensure logs are written
+    import sys
+    sys.stdout.flush()
+    sys.stderr.flush()
+    
+    # Small delay to ensure output is flushed
+    import time
+    time.sleep(0.1)
+    
     # Force immediate process termination (can't be caught by signal handlers)
     os._exit(0)
