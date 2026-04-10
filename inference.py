@@ -59,5 +59,5 @@ if __name__ == "__main__":
     print("=" * 40)
     print(json.dumps(results, indent=2))
     
-    # Ensure proper process termination
-    sys.exit(0)
+    # Force immediate process termination (can't be caught by signal handlers)
+    os._exit(0)
