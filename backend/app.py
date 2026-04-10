@@ -52,13 +52,36 @@ from contextlib import contextmanager
 from threading import Lock
 from typing import Dict, Any
 
-# Global environment and agents
-_env = CodeReviewEnv()
+# Global agents (shared)
 _baseline_agent = BaselineAgent()
 
-# Thread-safe session storage
+# Thread-safe session storage with per-session environments
 _sessions: Dict[str, Dict[str, Any]] = {}
 _session_lock = Lock()
+
+def get_session_env(session_id: str = "default") -> CodeReviewEnv:
+    """Get or create environment instance for session."""
+    with _session_lock:
+        if session_id not in _sessions:
+            _sessions[session_id] = {}
+        session = _sessions[session_id]
+        
+        if "env" not in session:
+            session["env"] = CodeReviewEnv()
+        
+        return session["env"]
+
+def cleanup_session(session_id: str = "default"):
+    """Clean up session resources to prevent memory leaks."""
+    with _session_lock:
+        if session_id in _sessions:
+            session = _sessions[session_id]
+            # Clear environment reference
+            session.pop("env", None)
+            # Clear other session data
+            session.clear()
+            # Remove session from storage
+            del _sessions[session_id]
 
 # Cache for task catalog (performance optimization)
 _task_catalog_cache: dict | None = None
@@ -91,7 +114,8 @@ def openenv_reset(task_id: Optional[str] = Body(default=None, embed=True)):
     
     try:
         task = load_task(task_id)
-        obs = _env.reset(task)
+        env = get_session_env("openenv")
+        obs = env.reset(task)
         grader = get_grader(task_id)
         
         # Use thread-safe session management
@@ -120,7 +144,8 @@ def openenv_step(action: dict = Body(...)):
             return JSONResponse(status_code=400, content={"error": "Call /reset first"})
         
         try:
-            obs, reward, done, info = _env.step(action)
+            env = get_session_env("openenv")
+            obs, reward, done, info = env.step(action)
             session["done"] = done
             session["obs"] = obs
             return {
@@ -141,7 +166,8 @@ def openenv_state():
     with get_session("openenv") as session:
         if not session:
             return {"state": None}
-        return {"state": _env.state()}
+        env = get_session_env("openenv")
+        return {"state": env.state()}
 
 
 @app.get("/api/tasks")
@@ -303,7 +329,8 @@ def reset(task_name: str):
         return JSONResponse(status_code=400, content={"error": "Unknown task"})
     
     try:
-        obs = _env.reset(task)
+        env = get_session_env("api")
+        obs = env.reset(task)
         
         # Use thread-safe session management
         with get_session("api") as session:
@@ -318,7 +345,7 @@ def reset(task_name: str):
         logger.info(f"Task {task_name} reset successfully")
         return {
             "observation": obs,
-            "state": _env.state(),
+            "state": env.state(),
             "task_id": task["id"],
             "difficulty": task["difficulty"],
             "description": task["description"],
@@ -347,13 +374,14 @@ def step(req: ActionRequest):
             action["text"] = req.text
 
         try:
-            obs, reward, done, info = _env.step(action)
+            env = get_session_env("api")
+            obs, reward, done, info = env.step(action)
         except Exception as e:
             return JSONResponse(status_code=400, content={"error": str(e)})
 
         session["done"] = done
         session["obs"] = obs
-        state = _env.state()
+        state = env.state()
 
     result = {
         "observation": obs,
@@ -382,7 +410,8 @@ def get_state():
     with get_session("api") as session:
         if not session:
             return {"state": None}
-        return {"state": _env.state(), "done": session.get("done", False)}
+        env = get_session_env("api")
+        return {"state": env.state(), "done": session.get("done", False)}
 
 
 @app.post("/api/auto_action")
@@ -395,12 +424,26 @@ def auto_action():
         if session.get("done"):
             return JSONResponse(status_code=400, content={"error": "Episode done. Reset first."})
         obs = session["obs"]
-        state = _env.state()
+        env = get_session_env("api")
+        state = env.state()
         action = _baseline_agent.act(obs, state)
         result = step(ActionRequest(**action))
         # Include the chosen action so the frontend knows what was done
         result["action"] = action
         return result
+
+
+@app.post("/api/cleanup")
+def cleanup_all_sessions():
+    """Clean up all session resources (useful for debugging/memory management)."""
+    try:
+        cleanup_session("openenv")
+        cleanup_session("api")
+        logger.info("All sessions cleaned up")
+        return {"message": "All sessions cleaned up successfully"}
+    except Exception as e:
+        logger.error(f"Session cleanup error: {e}", exc_info=True)
+        return JSONResponse(status_code=500, content={"error": str(e)})
 
 
 # ── Serve built frontend (production / Docker) ──────────────────────

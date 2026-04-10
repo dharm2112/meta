@@ -35,8 +35,8 @@
       "name": "1.4: Q-Learning Agent",
       "status": "PASS",
       "result": {
-        "reward": 0.1,
-        "q_size": 3
+        "reward": 0.0,
+        "q_size": 4
       }
     },
     {
@@ -97,8 +97,8 @@
   ],
   "phase3": {
     "total_py_files": 35,
-    "total_lines": 3924,
-    "total_functions": 142,
+    "total_lines": 3967,
+    "total_functions": 145,
     "total_classes": 18,
     "has_docstrings": 28,
     "has_type_hints": 23,
