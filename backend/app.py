@@ -32,7 +32,7 @@ logger = logging.getLogger(__name__)
 # Security: Configurable CORS origins (no wildcard)
 ALLOWED_ORIGINS = os.getenv(
     "ALLOWED_ORIGINS", 
-    "http://localhost:3000,http://localhost:5173,http://localhost:5174,http://localhost:7860,http://localhost:8000"
+    "http://localhost:3000,http://localhost:5173,http://localhost:8000"
 ).split(",")
 
 app = FastAPI(title="Code Review Assistant API")
@@ -315,40 +315,37 @@ def reset(task_name: str):
     """Reset environment with a specific task (static or dynamic)."""
     # Check if it's a dynamic uploaded task
     dynamic_task = get_dynamic_task(task_name)
-
+    
     if dynamic_task:
+        # Use the uploaded task
         task = dynamic_task
         grader = get_grader(task_name, is_custom=True)
     elif task_name in get_available_tasks():
+        # Use static task
         task = load_task(task_name)
         grader = get_grader(task_name)
     else:
         logger.warning(f"Unknown task requested: {task_name}")
         return JSONResponse(status_code=400, content={"error": "Unknown task"})
-
+    
     try:
-        # Single lock acquisition — avoids nested-lock deadlock
-        with _session_lock:
-            if "api" not in _sessions:
-                _sessions["api"] = {}
-            session = _sessions["api"]
-            if "env" not in session:
-                session["env"] = CodeReviewEnv()
-            env = session["env"]
-            obs = env.reset(task)
+        env = get_session_env("api")
+        obs = env.reset(task)
+        
+        # Use thread-safe session management
+        with get_session("api") as session:
             session.update({
-                "task_name": task_name,
-                "task": task,
-                "grader": grader,
-                "obs": obs,
-                "done": False,
+                "task_name": task_name, 
+                "task": task, 
+                "grader": grader, 
+                "obs": obs, 
+                "done": False
             })
-            state = env.state()
-
+        
         logger.info(f"Task {task_name} reset successfully")
         return {
             "observation": obs,
-            "state": state,
+            "state": env.state(),
             "task_id": task["id"],
             "difficulty": task["difficulty"],
             "description": task["description"],
@@ -363,69 +360,77 @@ def reset(task_name: str):
 
 @app.post("/api/step")
 def step(req: ActionRequest):
-    action = {"action_type": req.action_type}
-    if req.path:
-        action["path"] = req.path
-    if req.text:
-        action["text"] = req.text
-
-    with _session_lock:
-        session = _sessions.get("api", {})
+    # Use thread-safe session management
+    with get_session("api") as session:
         if not session:
             return JSONResponse(status_code=400, content={"error": "Call /api/reset first"})
         if session.get("done"):
             return JSONResponse(status_code=400, content={"error": "Episode done. Reset first."})
-        env = session["env"]
+
+        action = {"action_type": req.action_type}
+        if req.path:
+            action["path"] = req.path
+        if req.text:
+            action["text"] = req.text
+
         try:
+            env = get_session_env("api")
             obs, reward, done, info = env.step(action)
         except Exception as e:
             return JSONResponse(status_code=400, content={"error": str(e)})
+
         session["done"] = done
         session["obs"] = obs
         state = env.state()
-        score = None
-        report = None
-        if done:
-            score = session["grader"].grade_episode(state["actions_taken"])
-            report = session["grader"].generate_grade_report()
 
-    return {
+    result = {
         "observation": obs,
         "reward": reward,
         "done": done,
         "info": info,
         "state": state,
-        "score": score,
-        "report": report,
+        "score": None,
+        "report": None,
     }
+
+    # Use thread-safe session management for scoring
+    with get_session("api") as session:
+        if done and session:
+            score = session["grader"].grade_episode(state["actions_taken"])
+            report = session["grader"].generate_grade_report()
+            result["score"] = score
+            result["report"] = report
+
+    return result
 
 
 @app.get("/api/state")
 def get_state():
-    with _session_lock:
-        session = _sessions.get("api", {})
-        if not session or "env" not in session:
+    # Use thread-safe session management
+    with get_session("api") as session:
+        if not session:
             return {"state": None}
-        return {"state": session["env"].state(), "done": session.get("done", False)}
+        env = get_session_env("api")
+        return {"state": env.state(), "done": session.get("done", False)}
 
 
 @app.post("/api/auto_action")
 def auto_action():
     """Let the heuristic baseline agent pick the next action and execute it."""
-    with _session_lock:
-        session = _sessions.get("api", {})
+    # Use thread-safe session management
+    with get_session("api") as session:
         if not session:
             return JSONResponse(status_code=400, content={"error": "Call /api/reset first"})
         if session.get("done"):
             return JSONResponse(status_code=400, content={"error": "Episode done. Reset first."})
         obs = session["obs"]
-        env = session["env"]
+        env = get_session_env("api")
         state = env.state()
-
-    action = _baseline_agent.act(obs, state)
-    result = step(ActionRequest(**action))
-    result["action"] = action
-    return result
+        action = _baseline_agent.act(obs, state)
+        result = step(ActionRequest(**action))
+        # Include the chosen action so the frontend knows what was done
+        result["action"] = action
+        return result
 
 
 @app.post("/api/cleanup")
