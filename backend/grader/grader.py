@@ -37,6 +37,10 @@ class TaskGrader:
             return self._grade_review_only(actions_taken)
         
         score, breakdown = RewardEngine.score_actions(self.task, actions_taken)
+        
+        # Clamp score strictly to (0, 1) boundary to pass validation
+        score = max(0.01, min(0.99, score))
+        
         status = "PASS" if score >= float(self.task["pass_threshold"]) else "FAIL"
 
         self._last_report = {
@@ -95,6 +99,9 @@ class TaskGrader:
         decision_score = 0.30 if final_decision else 0.0  # 30% for making a decision
         
         total_score = coverage_score + comment_score + decision_score
+        
+        # Clamp score strictly to (0, 1) boundary to pass validation
+        total_score = max(0.01, min(0.99, total_score))
         
         # Build report
         self._last_report = {
